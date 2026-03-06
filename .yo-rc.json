@@ -1,0 +1,19 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "useGulp": false,
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.0.0",
+    "sdksVersions": {},
+    "version": "1.22.2",
+    "libraryName": "toc",
+    "libraryId": "2f546b36-f1a6-4154-b9d1-ac88e4ca42e6",
+    "environment": "spo",
+    "packageManager": "npm",
+    "solutionName": "TOC",
+    "solutionShortDescription": "TOC description",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart"
+  }
+}
