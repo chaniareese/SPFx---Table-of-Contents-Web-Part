@@ -1,35 +1,40 @@
 @import '~@fluentui/react/dist/sass/References.scss';
 
-// Main container - uses flexbox for side-by-side layout
+:global {
+  #workbenchPageContent,
+  .CanvasComponent.LCS .CanvasZone {
+    max-width: 100% !important;
+  }
+}
+
 .tableOfContents {
   display: flex;
-  gap: 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
   align-items: flex-start;
+  position: relative;
+  min-height: calc(100vh - 120px);
+  width: 100%;
+  box-sizing: border-box;
 
-  // The sticky Table of Contents on the left
   .tocContainer {
-    position: sticky;
-    top: 100px; // Adjust based on your SharePoint header height
+    position: absolute;
+    left: 0;
+    top: 0;
     width: 280px;
-    flex-shrink: 0;
-    max-height: calc(100vh - 120px);
+    height: 100%;
     overflow-y: auto;
     background-color: $ms-color-neutralLighter;
     padding: 20px;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
+    border-right: 1px solid $ms-color-neutralLight;
 
     h3 {
       font-size: 16px;
       margin-bottom: 16px;
+      margin-top: 0;
       color: $ms-color-neutralPrimary;
       font-weight: 600;
     }
 
-    // TOC list styling
     ul {
       list-style: none;
       padding: 0;
@@ -59,7 +64,6 @@
           }
         }
 
-        // Nested headings (H3 under H2, H4 under H3)
         ul {
           margin-left: 16px;
           margin-top: 8px;
@@ -76,33 +80,24 @@
       }
     }
 
-    // Custom scrollbar styling
-    &::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
+    &::-webkit-scrollbar { width: 6px; }
+    &::-webkit-scrollbar-track { background: transparent; }
     &::-webkit-scrollbar-thumb {
       background: $ms-color-neutralTertiary;
       border-radius: 3px;
-
-      &:hover {
-        background: $ms-color-neutralSecondary;
-      }
+      &:hover { background: $ms-color-neutralSecondary; }
     }
   }
 
-  // The content area on the right
   .contentContainer {
+    margin-left: 280px;
     flex: 1;
-    min-width: 0; // Prevents flex item from overflowing
+    min-width: 0;
+    height: calc(100vh - 120px);
+    overflow-y: auto;
     background: white;
     padding: 30px;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
 
     .title {
       font-size: 32px;
@@ -113,13 +108,12 @@
       padding-bottom: 12px;
     }
 
-    // Rich text editor container
     .editorContainer {
-      min-height: 400px;
-
-      // Quill editor styling
       :global {
         .ql-toolbar {
+          position: sticky;
+          top: 0;
+          z-index: 2;
           background-color: $ms-color-neutralLighterAlt;
           border: 1px solid $ms-color-neutralLight;
           border-radius: 4px 4px 0 0;
@@ -130,185 +124,75 @@
           border-top: none;
           border-radius: 0 0 4px 4px;
           font-size: 16px;
-          min-height: 400px;
 
           .ql-editor {
             min-height: 400px;
             padding: 20px;
 
-            // Heading styles in the editor
-            h2 {
-              font-size: 24px;
-              margin-top: 32px;
-              margin-bottom: 16px;
-              color: $ms-color-neutralPrimary;
-              font-weight: 600;
-              border-bottom: 2px solid $ms-color-themePrimary;
-              padding-bottom: 8px;
-            }
-
-            h3 {
-              font-size: 20px;
-              margin-top: 24px;
-              margin-bottom: 12px;
-              color: $ms-color-neutralPrimary;
-              font-weight: 600;
-            }
-
-            h4 {
-              font-size: 16px;
-              margin-top: 20px;
-              margin-bottom: 10px;
-              color: $ms-color-neutralSecondary;
-              font-weight: 600;
-            }
-
-            p {
-              margin-bottom: 16px;
-              line-height: 1.6;
-              color: $ms-color-neutralPrimary;
-            }
-
-            // Code blocks
-            pre {
-              background-color: $ms-color-neutralLighter;
-              padding: 16px;
-              border-radius: 4px;
-              overflow-x: auto;
-            }
-
-            code {
-              background-color: $ms-color-neutralLighter;
-              padding: 2px 6px;
-              border-radius: 3px;
-              font-family: 'Courier New', monospace;
-            }
-
-            // Tables
+            h2 { font-size: 24px; margin-top: 32px; margin-bottom: 16px; color: $ms-color-neutralPrimary; font-weight: 600; border-bottom: 2px solid $ms-color-themePrimary; padding-bottom: 8px; }
+            h3 { font-size: 20px; margin-top: 24px; margin-bottom: 12px; color: $ms-color-neutralPrimary; font-weight: 600; }
+            h4 { font-size: 16px; margin-top: 20px; margin-bottom: 10px; color: $ms-color-neutralSecondary; font-weight: 600; }
+            p { margin-bottom: 16px; line-height: 1.6; color: $ms-color-neutralPrimary; }
+            pre { background-color: $ms-color-neutralLighter; padding: 16px; border-radius: 4px; overflow-x: auto; }
+            code { background-color: $ms-color-neutralLighter; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
             table {
-              border-collapse: collapse;
-              width: 100%;
-              margin: 20px 0;
-
-              td, th {
-                border: 1px solid $ms-color-neutralLight;
-                padding: 10px;
-              }
-
-              th {
-                background-color: $ms-color-themeLighter;
-                font-weight: 600;
-              }
+              border-collapse: collapse; width: 100%; margin: 20px 0;
+              td, th { border: 1px solid $ms-color-neutralLight; padding: 10px; }
+              th { background-color: $ms-color-themeLighter; font-weight: 600; }
             }
           }
         }
       }
     }
 
-    // Content display (read mode)
     .contentDisplay {
-      h2 {
-        font-size: 24px;
-        margin-top: 32px;
-        margin-bottom: 16px;
-        color: $ms-color-neutralPrimary;
-        font-weight: 600;
-        border-bottom: 2px solid $ms-color-themePrimary;
-        padding-bottom: 8px;
-        scroll-margin-top: 120px; // Space for sticky header when scrolling
-      }
-
-      h3 {
-        font-size: 20px;
-        margin-top: 24px;
-        margin-bottom: 12px;
-        color: $ms-color-neutralPrimary;
-        font-weight: 600;
-        scroll-margin-top: 120px;
-      }
-
-      h4 {
-        font-size: 16px;
-        margin-top: 20px;
-        margin-bottom: 10px;
-        color: $ms-color-neutralSecondary;
-        font-weight: 600;
-        scroll-margin-top: 120px;
-      }
-
-      p {
-        margin-bottom: 16px;
-        line-height: 1.6;
-        color: $ms-color-neutralPrimary;
-      }
-
-      pre {
-        background-color: $ms-color-neutralLighter;
-        padding: 16px;
-        border-radius: 4px;
-        overflow-x: auto;
-      }
-
-      code {
-        background-color: $ms-color-neutralLighter;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-family: 'Courier New', monospace;
-      }
-
+      h2 { font-size: 24px; margin-top: 32px; margin-bottom: 16px; color: $ms-color-neutralPrimary; font-weight: 600; border-bottom: 2px solid $ms-color-themePrimary; padding-bottom: 8px; }
+      h3 { font-size: 20px; margin-top: 24px; margin-bottom: 12px; color: $ms-color-neutralPrimary; font-weight: 600; }
+      h4 { font-size: 16px; margin-top: 20px; margin-bottom: 10px; color: $ms-color-neutralSecondary; font-weight: 600; }
+      p { margin-bottom: 16px; line-height: 1.6; color: $ms-color-neutralPrimary; }
+      pre { background-color: $ms-color-neutralLighter; padding: 16px; border-radius: 4px; overflow-x: auto; }
+      code { background-color: $ms-color-neutralLighter; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
       table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 20px 0;
-
-        td, th {
-          border: 1px solid $ms-color-neutralLight;
-          padding: 10px;
-        }
-
-        th {
-          background-color: $ms-color-themeLighter;
-          font-weight: 600;
-        }
+        border-collapse: collapse; width: 100%; margin: 20px 0;
+        td, th { border: 1px solid $ms-color-neutralLight; padding: 10px; }
+        th { background-color: $ms-color-themeLighter; font-weight: 600; }
       }
     }
   }
 
-  // Mobile responsive - stack vertically
-  @media (max-width: 1024px) {
-    flex-direction: column;
-
+  @media (max-width: 900px) {
     .tocContainer {
       position: static;
       width: 100%;
-      max-height: none;
-      margin-bottom: 20px;
+      height: auto;
+      max-height: 250px;
+      border-right: none;
+      border-bottom: 1px solid $ms-color-neutralLight;
+    }
+    .contentContainer {
+      margin-left: 0;
+      height: auto;
     }
   }
 
-  // Hide TOC on mobile if configured
   &.hideInMobile {
     @media (max-width: 768px) {
-      .tocContainer {
-        display: none;
-      }
+      .tocContainer { display: none; }
+      .contentContainer { margin-left: 0; }
     }
   }
 }
 
-// Empty state when no content
+.tocEmpty {
+  font-size: 14px;
+  color: #666;
+}
+
 .emptyState {
   text-align: center;
   padding: 60px 20px;
   color: $ms-color-neutralSecondary;
 
-  h3 {
-    font-size: 20px;
-    margin-bottom: 12px;
-  }
-
-  p {
-    font-size: 14px;
-    margin-bottom: 20px;
-  }
+  h3 { font-size: 20px; margin-bottom: 12px; }
+  p { font-size: 14px; margin-bottom: 20px; }
 }

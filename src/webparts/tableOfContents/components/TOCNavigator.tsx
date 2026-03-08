@@ -26,7 +26,7 @@ export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
     return (
       <div className={styles.tocContainer}>
         <h3>📑 Table of Contents</h3>
-        <p style={{ fontSize: '14px', color: '#666' }}>
+        <p className={styles.tocEmpty}>
           No headings found. Add H2, H3, or H4 headings to your content.
         </p>
       </div>
@@ -56,29 +56,25 @@ export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
 
       result.push(
         <li key={current.id}>
-          
-           const isActive = activeHeadingId === current.id;
-
-      result.push(
-        <li key={current.id}>
-          
+          <a
             href={`#${current.id}`}
             className={isActive ? styles.active : ''}
-            onClick={(e) => {
+            onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
               e.preventDefault();
               onHeadingClick(current.id);
             }}
           >
             {current.text}
           </a>
-          {children.length > 0 && (
-            <ul>{buildNestedTOC(children)}</ul>
-          )}
+          {children.length > 0 && <ul>{buildNestedTOC(children)}</ul>}
         </li>
       );
 
       // Skip children we've already processed
       i = j;
+    }
+
+    return result;
   };
 
   return (

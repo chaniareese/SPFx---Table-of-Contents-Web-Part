@@ -9,7 +9,11 @@ import { DisplayMode } from '@microsoft/sp-core-library';
 
 export default class TableOfContents extends React.Component<ITableOfContentsProps, ITableOfContentsState> {
   private contentRef = React.createRef<HTMLDivElement>();
-  private updateTimeout: NodeJS.Timeout | null = null;
+  private editorContainerRef = React.createRef<HTMLDivElement>();
+  private contentContainerRef = React.createRef<HTMLDivElement>();
+
+  private updateTimeout: ReturnType<typeof setTimeout> | null = null;
+  private scanInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(props: ITableOfContentsProps) {
     super(props);
@@ -21,74 +25,79 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
   }
 
   public componentDidMount(): void {
-    // Extract headings after component mounts
     this.extractHeadings();
-    
-    // Set up scroll listener for active heading detection
-    window.addEventListener('scroll', this.handleScroll);
-  }
-
-  public componentWillUnmount(): void {
-    window.removeEventListener('scroll', this.handleScroll);
-    if (this.updateTimeout) {
-      clearTimeout(this.updateTimeout);
+    this.scanInterval = setInterval(() => this.extractHeadings(), 2000);
+    const contentEl = this.contentContainerRef.current;
+    if (contentEl) {
+      contentEl.addEventListener('scroll', this.handleScroll);
     }
   }
 
+  public componentWillUnmount(): void {
+    const contentEl = this.contentContainerRef.current;
+    if (contentEl) {
+      contentEl.removeEventListener('scroll', this.handleScroll);
+    }
+    if (this.updateTimeout) clearTimeout(this.updateTimeout);
+    if (this.scanInterval) clearInterval(this.scanInterval);
+  }
+
   public componentDidUpdate(prevProps: ITableOfContentsProps): void {
-    // Re-extract headings if content changes
     if (prevProps.content !== this.props.content) {
       this.extractHeadings();
       this.setState({ editorContent: this.props.content });
     }
   }
 
-  // Extract H2, H3, H4 headings from content
   private extractHeadings = (): void => {
-    if (!this.contentRef.current) return;
+    const isEdit = this.props.displayMode === DisplayMode.Edit;
+    const readContainer = this.contentRef.current;
+    const editContainer = this.editorContainerRef.current?.querySelector('.ql-editor') as HTMLElement | null;
+    const headingContainer = isEdit ? editContainer : readContainer;
 
-    const headingElements = this.contentRef.current.querySelectorAll('h2, h3, h4');
+    if (!headingContainer) {
+      this.setState({ headings: [] });
+      return;
+    }
+
+    const headingElements = headingContainer.querySelectorAll('h2, h3, h4');
     const headings: IHeading[] = [];
 
     headingElements.forEach((element: Element, index: number) => {
       const htmlElement = element as HTMLElement;
-      const level = parseInt(element.tagName.substring(1)); // H2 -> 2, H3 -> 3
+      const level = parseInt(element.tagName.substring(1), 10);
       const text = htmlElement.innerText || htmlElement.textContent || '';
-      
-      // Generate unique ID if not present
+      if (!text.trim()) return;
+
       let id = htmlElement.id;
       if (!id) {
         id = `heading-${level}-${index}`;
         htmlElement.id = id;
       }
 
-      headings.push({
-        id,
-        text: text.trim(),
-        level,
-        element: htmlElement
-      });
+      headings.push({ id, text: text.trim(), level, element: htmlElement });
     });
 
-    this.setState({ headings });
+    const nextSig = headings.map(h => `${h.id}|${h.level}|${h.text}`).join('||');
+    const prevSig = this.state.headings.map(h => `${h.id}|${h.level}|${h.text}`).join('||');
+    if (nextSig !== prevSig) {
+      this.setState({ headings });
+    }
   };
 
-  // Detect which heading is currently in view
   private handleScroll = (): void => {
     const { headings } = this.state;
-    if (headings.length === 0) return;
+    const contentEl = this.contentContainerRef.current;
+    if (headings.length === 0 || !contentEl) return;
 
-    // Find the heading closest to the top of the viewport
     let activeId: string | null = null;
-    const scrollPosition = window.scrollY + 150; // Offset for better UX
+    const containerTop = contentEl.getBoundingClientRect().top;
 
     for (let i = headings.length - 1; i >= 0; i--) {
       const heading = headings[i];
       if (heading.element) {
         const rect = heading.element.getBoundingClientRect();
-        const elementTop = rect.top + window.scrollY;
-        
-        if (scrollPosition >= elementTop) {
+        if (rect.top - containerTop <= 80) {
           activeId = heading.id;
           break;
         }
@@ -100,43 +109,34 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     }
   };
 
-  // Handle clicking on TOC links
   private handleTOCClick = (id: string): void => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
-      });
-      
-      // Update active heading
+    const contentEl = this.contentContainerRef.current;
+    const target = document.getElementById(id);
+    if (contentEl && target) {
+      const scrollTop = contentEl.scrollTop;
+      const containerTop = contentEl.getBoundingClientRect().top;
+      const targetTop = target.getBoundingClientRect().top;
+      const absoluteTargetTop = scrollTop + targetTop - containerTop - 10;
+      contentEl.scrollTo({ top: absoluteTargetTop, behavior: 'smooth' });
       this.setState({ activeHeadingId: id });
     }
   };
 
-  // Handle content changes in the editor
   private handleEditorChange = (content: string): void => {
     this.setState({ editorContent: content });
-
-    // Debounce the update to avoid too many calls
-    if (this.updateTimeout) {
-      clearTimeout(this.updateTimeout);
-    }
-
+    if (this.updateTimeout) clearTimeout(this.updateTimeout);
     this.updateTimeout = setTimeout(() => {
       this.props.updateProperty(content);
-      // Re-extract headings after content updates
       setTimeout(() => this.extractHeadings(), 100);
     }, 500);
   };
 
-  // Quill editor configuration
   private modules = {
     toolbar: [
       [{ 'header': [2, 3, 4, false] }],
       ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
       ['link', 'image', 'code-block'],
       [{ 'color': [] }, { 'background': [] }],
       ['clean']
@@ -144,33 +144,31 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
   };
 
   private formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
+    'header', 'bold', 'italic', 'underline', 'strike',
     'list', 'bullet', 'indent',
-    'link', 'image', 'code-block',
-    'color', 'background'
+    'link', 'image', 'code-block', 'color', 'background'
   ];
 
   public render(): React.ReactElement<ITableOfContentsProps> {
     const { title, showH2, showH3, showH4, hideInMobile, displayMode } = this.props;
     const { headings, activeHeadingId, editorContent } = this.state;
-
     const isEditMode = displayMode === DisplayMode.Edit;
-    const containerClass = hideInMobile ? `${styles.tableOfContents} ${styles.hideInMobile}` : styles.tableOfContents;
 
-    // Empty state when no content
+    const containerClass = hideInMobile
+      ? `${styles.tableOfContents} ${styles.hideInMobile}`
+      : styles.tableOfContents;
+
     if (!editorContent && !isEditMode) {
       return (
         <div className={styles.emptyState}>
           <h3>📋 No Content Yet</h3>
-          <p>Edit this page and add content to your runbook to get started.</p>
+          <p>Edit this page and add content to get started.</p>
         </div>
       );
     }
 
     return (
       <div className={containerClass}>
-        {/* Table of Contents - Sticky on left */}
         <TOCNavigator
           headings={headings}
           activeHeadingId={activeHeadingId}
@@ -179,26 +177,21 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
           showH4={showH4}
           onHeadingClick={this.handleTOCClick}
         />
-
-        {/* Content Area - Scrollable on right */}
-        <div className={styles.contentContainer}>
+        <div className={styles.contentContainer} ref={this.contentContainerRef}>
           {title && <h1 className={styles.title}>{title}</h1>}
-
           {isEditMode ? (
-            // Edit mode: Show rich text editor
-            <div className={styles.editorContainer}>
+            <div className={styles.editorContainer} ref={this.editorContainerRef}>
               <ReactQuill
                 value={editorContent}
                 onChange={this.handleEditorChange}
                 modules={this.modules}
                 formats={this.formats}
                 theme="snow"
-                placeholder="Start writing your DR/BC runbook content here... Use Heading 2, 3, or 4 for sections that will appear in the Table of Contents."
+                placeholder="Start writing your content here… Use Heading 2, 3, or 4 for sections that will appear in the Table of Contents."
               />
             </div>
           ) : (
-            // View mode: Display content
-            <div 
+            <div
               className={styles.contentDisplay}
               ref={this.contentRef}
               dangerouslySetInnerHTML={{ __html: editorContent }}
