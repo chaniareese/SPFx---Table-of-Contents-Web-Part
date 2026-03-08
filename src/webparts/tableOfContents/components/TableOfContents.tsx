@@ -3,8 +3,7 @@ import styles from './TableOfContents.module.scss';
 import { ITableOfContentsProps } from './ITableOfContentsProps';
 import { ITableOfContentsState, IHeading } from './ITableOfContentsState';
 import { TOCNavigator } from './TOCNavigator';
-import ReactQuill from 'react-quill';
-import 'quill/dist/quill.snow.css';
+import { TipTapEditor } from './TipTapEditor';
 import { DisplayMode } from '@microsoft/sp-core-library';
 
 export default class TableOfContents extends React.Component<ITableOfContentsProps, ITableOfContentsState> {
@@ -52,7 +51,7 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
   private extractHeadings = (): void => {
     const isEdit = this.props.displayMode === DisplayMode.Edit;
     const readContainer = this.contentRef.current;
-    const editContainer = this.editorContainerRef.current?.querySelector('.ql-editor') as HTMLElement | null;
+    const editContainer = this.editorContainerRef.current?.querySelector('.ProseMirror') as HTMLElement | null;
     const headingContainer = isEdit ? editContainer : readContainer;
 
     if (!headingContainer) {
@@ -131,24 +130,6 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     }, 500);
   };
 
-  private modules = {
-    toolbar: [
-      [{ 'header': [2, 3, 4, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      [{ 'indent': '-1' }, { 'indent': '+1' }],
-      ['link', 'image', 'code-block'],
-      [{ 'color': [] }, { 'background': [] }],
-      ['clean']
-    ]
-  };
-
-  private formats = [
-    'header', 'bold', 'italic', 'underline', 'strike',
-    'list', 'bullet', 'indent',
-    'link', 'image', 'code-block', 'color', 'background'
-  ];
-
   public render(): React.ReactElement<ITableOfContentsProps> {
     const { title, showH2, showH3, showH4, hideInMobile, displayMode } = this.props;
     const { headings, activeHeadingId, editorContent } = this.state;
@@ -175,18 +156,15 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
           showH2={showH2}
           showH3={showH3}
           showH4={showH4}
+          tocTitle={title}
           onHeadingClick={this.handleTOCClick}
         />
         <div className={styles.contentContainer} ref={this.contentContainerRef}>
-          {title && <h1 className={styles.title}>{title}</h1>}
           {isEditMode ? (
             <div className={styles.editorContainer} ref={this.editorContainerRef}>
-              <ReactQuill
-                value={editorContent}
+              <TipTapEditor
+                content={editorContent}
                 onChange={this.handleEditorChange}
-                modules={this.modules}
-                formats={this.formats}
-                theme="snow"
                 placeholder="Start writing your content here… Use Heading 2, 3, or 4 for sections that will appear in the Table of Contents."
               />
             </div>

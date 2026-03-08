@@ -1,0 +1,725 @@
+@import '~@fluentui/react/dist/sass/References.scss';
+
+/* ================================================================ */
+/*  Editor Wrapper                                                    */
+/* ================================================================ */
+
+.editorWrapper {
+  position: relative;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* ================================================================ */
+/*  Toolbars                                                          */
+/* ================================================================ */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: $ms-color-neutralLighterAlt;
+  border-bottom: 1px solid $ms-color-neutralLight;
+  border-radius: 6px 6px 0 0;
+  user-select: none;
+
+
+}
+
+/* Toolbar group with right separator */
+.tbGroup {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: 6px;
+  margin-right: 4px;
+  border-right: 1px solid $ms-color-neutralLight;
+
+  &:last-child {
+    border-right: none;
+    padding-right: 0;
+    margin-right: 0;
+  }
+}
+
+/* Toolbar buttons */
+.tbBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border: none;
+  background: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  color: $ms-color-neutralPrimary;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.12s;
+
+  &:hover {
+    background: $ms-color-neutralLight;
+  }
+
+  &.tbActive {
+    background: $ms-color-themeLighter;
+    color: $ms-color-themePrimary;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
+    &:hover { background: transparent; }
+  }
+
+  &.tbDanger:hover {
+    background: #fde7e9;
+    color: #a4262c;
+  }
+
+  svg { display: block; }
+}
+
+/* Floating table toolbar */
+.tableToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: #f0f4f8;
+  border: 1px solid #d0d8e0;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  user-select: none;
+}
+
+/* Font size trigger button */
+.sizeBtn {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  color: $ms-color-neutralPrimary;
+  outline: none;
+  gap: 2px;
+
+  &:hover { border-color: $ms-color-neutralTertiary; }
+  &:focus { border-color: $ms-color-themePrimary; }
+}
+
+.dropArrow {
+  font-size: 8px;
+  color: $ms-color-neutralSecondary;
+}
+
+/* Font size dropdown popup */
+.fontSizePopup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 25;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  padding: 4px 0;
+  min-width: 80px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.fontSizeOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: $ms-color-neutralPrimary;
+  text-align: left;
+
+  &:hover { background: $ms-color-neutralLighter; }
+
+  &.fontSizeActive {
+    font-weight: 600;
+    color: $ms-color-themePrimary;
+  }
+}
+
+.checkmark {
+  color: $ms-color-themePrimary;
+  font-weight: 700;
+  font-size: 14px;
+  width: 16px;
+}
+
+/* Mini popup for alignment/list dropdowns */
+.miniPopup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 25;
+  display: flex;
+  gap: 1px;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 4px;
+}
+
+/* Select dropdowns in toolbar */
+.tbSelect {
+  height: 28px;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 12px;
+  padding: 0 4px;
+  cursor: pointer;
+  color: $ms-color-neutralPrimary;
+  outline: none;
+
+  &:focus { border-color: $ms-color-themePrimary; }
+}
+
+/* Relative wrapper for popups */
+.tbDropWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Color indicator on font-color / border-color buttons */
+.colorIndicator {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  border-bottom: 3px solid;
+  padding-bottom: 1px;
+}
+
+/* Highlight indicator */
+.highlightIndicator {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 2px;
+  line-height: 1;
+}
+
+/* Superscript / subscript button content */
+.scriptBtn {
+  font-size: 13px;
+  sup, sub { font-size: 9px; }
+}
+
+/* ================================================================ */
+/*  Color Picker popup                                                */
+/* ================================================================ */
+
+.colorPicker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 8px;
+  width: 230px;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.colorSwatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s;
+
+  &:hover {
+    transform: scale(1.25);
+    border-color: $ms-color-neutralSecondary;
+  }
+
+  &.activeSwatch {
+    border-color: $ms-color-themePrimary;
+    box-shadow: 0 0 0 1px $ms-color-themePrimary;
+  }
+}
+
+.colorClear {
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 3px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: $ms-color-neutralSecondary;
+
+  &:hover { background: $ms-color-neutralLighter; }
+}
+
+/* ================================================================ */
+/*  Table Grid Selector                                               */
+/* ================================================================ */
+
+.gridSelector {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 8px;
+}
+
+.gridLabel {
+  text-align: center;
+  font-size: 11px;
+  color: $ms-color-neutralSecondary;
+  margin-bottom: 4px;
+  min-height: 16px;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gridRow {
+  display: flex;
+  gap: 2px;
+}
+
+.gridCell {
+  width: 20px;
+  height: 20px;
+  border: 1px solid $ms-color-neutralTertiary;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.08s;
+
+  &:hover { border-color: $ms-color-themePrimary; }
+
+  &.gridHighlight {
+    background: $ms-color-themeLighter;
+    border-color: $ms-color-themePrimary;
+  }
+}
+
+/* ================================================================ */
+/*  Link Input popup                                                  */
+/* ================================================================ */
+
+.linkInput {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 6px 8px;
+  min-width: 300px;
+
+  input {
+    flex: 1;
+    height: 28px;
+    border: 1px solid $ms-color-neutralLight;
+    border-radius: 3px;
+    padding: 0 8px;
+    font-size: 13px;
+    outline: none;
+
+    &:focus { border-color: $ms-color-themePrimary; }
+  }
+
+  button {
+    height: 28px;
+    padding: 0 12px;
+    border: 1px solid $ms-color-neutralLight;
+    border-radius: 3px;
+    background: $ms-color-themePrimary;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover { background: $ms-color-themeDark; }
+    &:disabled { opacity: 0.5; cursor: default; }
+
+    &:last-child:not(:first-of-type) {
+      background: transparent;
+      color: $ms-color-neutralSecondary;
+      border-color: $ms-color-neutralLight;
+
+      &:hover {
+        background: #fde7e9;
+        color: #a4262c;
+      }
+    }
+  }
+}
+
+/* ================================================================ */
+/*  Image Insert popup                                                */
+/* ================================================================ */
+
+.imageInsert {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid $ms-color-neutralLight;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.12);
+  padding: 12px;
+  width: 280px;
+}
+
+.imageInsertSection {
+  display: flex;
+  gap: 4px;
+
+  input {
+    flex: 1;
+    height: 30px;
+    border: 1px solid $ms-color-neutralLight;
+    border-radius: 3px;
+    padding: 0 8px;
+    font-size: 13px;
+    outline: none;
+
+    &:focus { border-color: $ms-color-themePrimary; }
+  }
+
+  button {
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid $ms-color-neutralLight;
+    border-radius: 3px;
+    background: $ms-color-themePrimary;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover { background: $ms-color-themeDark; }
+    &:disabled { opacity: 0.5; cursor: default; }
+  }
+}
+
+.imageUploadBtn {
+  width: 100%;
+  height: 34px;
+  border: 1px dashed $ms-color-neutralTertiary;
+  border-radius: 4px;
+  background: $ms-color-neutralLighterAlt;
+  color: $ms-color-themePrimary;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+
+  &:hover {
+    background: $ms-color-themeLighter;
+    border-color: $ms-color-themePrimary;
+  }
+}
+
+.imageInsertDivider {
+  text-align: center;
+  font-size: 11px;
+  color: $ms-color-neutralTertiary;
+  margin: 8px 0;
+  position: relative;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: $ms-color-neutralLight;
+  }
+  &::before { left: 0; }
+  &::after { right: 0; }
+}
+
+.imageInsertHint {
+  font-size: 11px;
+  color: $ms-color-neutralTertiary;
+  margin-top: 8px;
+  font-style: italic;
+}
+
+/* ================================================================ */
+/*  Resizable Image                                                   */
+/* ================================================================ */
+
+.resizableImageWrapper {
+  display: block;
+  line-height: 0;
+  margin: 8px 0;
+}
+
+.resizableImageContainer {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 4px;
+  }
+
+  &.resizableImageSelected {
+    outline: 2px solid $ms-color-themePrimary;
+    border-radius: 4px;
+  }
+}
+
+.resizeHandle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
+  background: $ms-color-themePrimary;
+  border: 1.5px solid #fff;
+  border-radius: 2px;
+  cursor: nwse-resize;
+  z-index: 5;
+}
+
+/* ================================================================ */
+/*  Editor content area (ProseMirror)                                 */
+/* ================================================================ */
+
+.editorContent {
+  :global {
+    .ProseMirror {
+      min-height: 120px;
+      padding: 20px;
+      outline: none;
+      font-size: 16px;
+      line-height: 1.6;
+      color: $ms-color-neutralPrimary;
+
+      > * + * { margin-top: 0.5em; }
+
+      /* ── Headings ── */
+      h1 {
+        font-size: 28px;
+        margin-top: 36px;
+        margin-bottom: 16px;
+        font-weight: 600;
+        color: $ms-color-neutralPrimary;
+        border-bottom: 2px solid $ms-color-themePrimary;
+        padding-bottom: 8px;
+      }
+
+      h2 {
+        font-size: 28px;
+        margin-top: 32px;
+        margin-bottom: 16px;
+        font-weight: 600;
+        color: $ms-color-neutralPrimary;
+        border-bottom: 2px solid $ms-color-themePrimary;
+        padding-bottom: 8px;
+      }
+
+      h3 {
+        font-size: 24px;
+        margin-top: 24px;
+        margin-bottom: 12px;
+        font-weight: 600;
+        color: $ms-color-neutralPrimary;
+      }
+
+      h4 {
+        font-size: 20px;
+        margin-top: 20px;
+        margin-bottom: 10px;
+        font-weight: 600;
+        color: $ms-color-neutralSecondary;
+      }
+
+      /* ── Paragraphs ── */
+      p { margin-bottom: 8px; }
+
+      /* ── Lists ── */
+      ul, ol {
+        padding-left: 24px;
+        margin-bottom: 12px;
+        li { margin-bottom: 4px; }
+      }
+
+      /* ── Blockquote ── */
+      blockquote {
+        border-left: 3px solid $ms-color-themePrimary;
+        padding-left: 16px;
+        margin-left: 0;
+        color: $ms-color-neutralSecondary;
+      }
+
+      /* ── Code ── */
+      code {
+        background: $ms-color-neutralLighter;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+      }
+
+      pre {
+        background: $ms-color-neutralLighter;
+        padding: 16px;
+        border-radius: 4px;
+        overflow-x: auto;
+        code {
+          background: none;
+          padding: 0;
+        }
+      }
+
+      /* ── Horizontal rule ── */
+      hr {
+        border: none;
+        border-top: 1px solid $ms-color-neutralLight;
+        margin: 24px 0;
+      }
+
+      /* ── Images ── */
+      img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+
+        &.ProseMirror-selectednode {
+          outline: 2px solid $ms-color-themePrimary;
+        }
+      }
+
+      /* ── Links ── */
+      a {
+        color: $ms-color-themePrimary;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      /* ── Marks ── */
+      mark { border-radius: 2px; padding: 1px 2px; }
+
+      /* ── Tables ── */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 16px 0;
+        table-layout: fixed;
+        overflow: hidden;
+
+        td, th {
+          border: 1px solid $ms-color-neutralLight;
+          padding: 8px 12px;
+          text-align: left;
+          vertical-align: top;
+          position: relative;
+          min-width: 50px;
+        }
+
+        th {
+          background: $ms-color-neutralLighterAlt;
+          font-weight: 600;
+        }
+
+        /* Selected cell */
+        .selectedCell::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 120, 215, 0.08);
+          pointer-events: none;
+          z-index: 1;
+        }
+
+        /* Column resize handle */
+        .column-resize-handle {
+          position: absolute;
+          right: -2px;
+          top: 0;
+          bottom: -2px;
+          width: 4px;
+          background: $ms-color-themePrimary;
+          pointer-events: none;
+          z-index: 2;
+        }
+      }
+
+      .tableWrapper {
+        overflow-x: auto;
+        margin: 16px 0;
+      }
+
+      &.resize-cursor { cursor: col-resize; }
+
+      /* ── Placeholder ── */
+      p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        color: $ms-color-neutralTertiary;
+        pointer-events: none;
+        height: 0;
+        font-style: italic;
+      }
+
+      /* ── Gap cursor ── */
+      .ProseMirror-gapcursor {
+        &::after {
+          border-top: 1px solid $ms-color-neutralPrimary;
+        }
+      }
+    }
+  }
+}

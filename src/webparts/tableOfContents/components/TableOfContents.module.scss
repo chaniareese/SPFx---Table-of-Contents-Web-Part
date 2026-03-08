@@ -109,40 +109,7 @@
     }
 
     .editorContainer {
-      :global {
-        .ql-toolbar {
-          position: sticky;
-          top: 0;
-          z-index: 2;
-          background-color: $ms-color-neutralLighterAlt;
-          border: 1px solid $ms-color-neutralLight;
-          border-radius: 4px 4px 0 0;
-        }
-
-        .ql-container {
-          border: 1px solid $ms-color-neutralLight;
-          border-top: none;
-          border-radius: 0 0 4px 4px;
-          font-size: 16px;
-
-          .ql-editor {
-            min-height: 400px;
-            padding: 20px;
-
-            h2 { font-size: 24px; margin-top: 32px; margin-bottom: 16px; color: $ms-color-neutralPrimary; font-weight: 600; border-bottom: 2px solid $ms-color-themePrimary; padding-bottom: 8px; }
-            h3 { font-size: 20px; margin-top: 24px; margin-bottom: 12px; color: $ms-color-neutralPrimary; font-weight: 600; }
-            h4 { font-size: 16px; margin-top: 20px; margin-bottom: 10px; color: $ms-color-neutralSecondary; font-weight: 600; }
-            p { margin-bottom: 16px; line-height: 1.6; color: $ms-color-neutralPrimary; }
-            pre { background-color: $ms-color-neutralLighter; padding: 16px; border-radius: 4px; overflow-x: auto; }
-            code { background-color: $ms-color-neutralLighter; padding: 2px 6px; border-radius: 3px; font-family: 'Courier New', monospace; }
-            table {
-              border-collapse: collapse; width: 100%; margin: 20px 0;
-              td, th { border: 1px solid $ms-color-neutralLight; padding: 10px; }
-              th { background-color: $ms-color-themeLighter; font-weight: 600; }
-            }
-          }
-        }
-      }
+      /* TipTapEditor handles its own styling via TipTapEditor.module.scss */
     }
 
     .contentDisplay {

@@ -8,11 +8,14 @@ export interface ITOCNavigatorProps {
   showH2: boolean;
   showH3: boolean;
   showH4: boolean;
+  tocTitle?: string;
   onHeadingClick: (id: string) => void;
 }
 
 export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
-  const { headings, activeHeadingId, showH2, showH3, showH4, onHeadingClick } = props;
+  const { headings, activeHeadingId, showH2, showH3, showH4, tocTitle, onHeadingClick } = props;
+
+  const displayTitle = tocTitle || 'Table of Contents';
 
   // Filter headings based on user preferences
   const filteredHeadings = headings.filter(h => {
@@ -25,7 +28,7 @@ export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
   if (filteredHeadings.length === 0) {
     return (
       <div className={styles.tocContainer}>
-        <h3>📑 Table of Contents</h3>
+        <h3>{displayTitle}</h3>
         <p className={styles.tocEmpty}>
           No headings found. Add H2, H3, or H4 headings to your content.
         </p>
@@ -79,7 +82,7 @@ export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
 
   return (
     <div className={styles.tocContainer}>
-      <h3>📑 Table of Contents</h3>
+      <h3>{displayTitle}</h3>
       <ul>
         {buildNestedTOC(filteredHeadings)}
       </ul>

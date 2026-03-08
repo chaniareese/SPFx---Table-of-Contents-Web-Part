@@ -56,15 +56,15 @@ export default class TableOfContentsWebPart extends BaseClientSideWebPart<ITable
       pages: [
         {
           header: {
-            description: 'Configure your DR/BC runbook settings'
+            description: 'Configure your Table of Contents settings'
           },
           groups: [
             {
               groupName: 'General Settings',
               groupFields: [
                 PropertyPaneTextField('title', {
-                  label: 'Runbook Title',
-                  placeholder: 'e.g., DR/BC System Runbook'
+                  label: 'TOC Title',
+                  placeholder: 'e.g., Table of Contents'
                 })
               ]
             },
@@ -121,6 +121,9 @@ export default class TableOfContentsWebPart extends BaseClientSideWebPart<ITable
     }
     if (!this.properties.content) {
       this.properties.content = '<h2>Getting Started</h2><p>Welcome to your DR/BC System Runbook! Start editing to add your content.</p><h3>Quick Start</h3><p>Use Heading 2 for main sections and Heading 3 for subsections.</p>';
+    }
+    if (!this.properties.title) {
+      this.properties.title = 'Table of Contents';
     }
 
     return super.onInit();
