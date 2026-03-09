@@ -11,25 +11,24 @@
   display: flex;
   align-items: flex-start;
   position: relative;
-  min-height: calc(100vh - 120px);
   width: 100%;
   box-sizing: border-box;
 
   .tocContainer {
-    position: absolute;
-    left: 0;
+    position: sticky;
     top: 0;
-    width: 280px;
-    height: 100%;
-    overflow-y: auto;
+    align-self: flex-start;
+    width: 260px;
+    flex-shrink: 0;
+    overflow-y: visible;
     background-color: transparent;
-    padding: 20px;
+    padding: 14px 16px;
     box-sizing: border-box;
     border: 1px solid $ms-color-neutralTertiary;
 
     h3 {
-      font-size: 16px;
-      margin-bottom: 16px;
+      font-size: 14px;
+      margin-bottom: 10px;
       margin-top: 0;
       color: $ms-color-neutralPrimary;
       font-weight: 600;
@@ -41,20 +40,21 @@
       margin: 0;
 
       li {
-        margin-bottom: 8px;
+        margin-bottom: 2px;
 
         a {
           display: block;
-          padding: 6px 12px;
+          padding: 3px 10px;
           color: $ms-color-themePrimary;
           text-decoration: none;
-          font-size: 14px;
+          font-size: 13px;
+          line-height: 1.4;
           font-weight: 400;
-          border-radius: 4px;
+          border-radius: 3px;
           transition: all 0.2s ease;
 
           &.h2Link {
-            font-weight: 700;
+            font-weight: 600;
           }
 
           &.h3Link {
@@ -77,32 +77,25 @@
         }
 
         ul {
-          margin-left: 16px;
-          margin-top: 8px;
+          margin-left: 12px;
+          margin-top: 2px;
 
           li {
-            margin-bottom: 6px;
+            margin-bottom: 2px;
 
             a {
-              font-size: 13px;
-              padding: 4px 10px;
+              font-size: 12px;
+              padding: 2px 8px;
             }
           }
         }
       }
     }
 
-    &::-webkit-scrollbar { width: 6px; }
-    &::-webkit-scrollbar-track { background: transparent; }
-    &::-webkit-scrollbar-thumb {
-      background: $ms-color-neutralTertiary;
-      border-radius: 3px;
-      &:hover { background: $ms-color-neutralSecondary; }
-    }
   }
 
   .contentContainer {
-    margin-left: 280px;
+    margin-left: 0;
     flex: 1;
     min-width: 0;
     height: calc(100vh - 120px);
@@ -140,16 +133,15 @@
   }
 
   @media (max-width: 900px) {
+    flex-direction: column;
+
     .tocContainer {
       position: static;
       width: 100%;
-      height: auto;
-      max-height: 250px;
-      border-right: none;
+      max-height: 200px;
       border-bottom: 1px solid $ms-color-neutralLight;
     }
     .contentContainer {
-      margin-left: 0;
       height: auto;
     }
   }
