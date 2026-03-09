@@ -45,23 +45,25 @@ export const TOCNavigator: React.FC<ITOCNavigatorProps> = (props) => {
       const current = items[i];
       const children: IHeading[] = [];
 
-      // Find all children (higher level numbers = sub-headings)
+      // Collect all deeper headings until we hit one at the same or higher level
       let j = i + 1;
       while (j < items.length && items[j].level > current.level) {
-        if (items[j].level === current.level + 1) {
-          // Direct child
-          children.push(items[j]);
-        }
+        children.push(items[j]);
         j++;
       }
 
       const isActive = activeHeadingId === current.id;
+      const levelClass = current.level === 2
+        ? styles.h2Link
+        : current.level === 3
+          ? styles.h3Link
+          : styles.h4Link;
 
       result.push(
         <li key={current.id}>
           <a
             href={`#${current.id}`}
-            className={isActive ? styles.active : ''}
+            className={`${levelClass} ${isActive ? styles.active : ''}`.trim()}
             onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
               e.preventDefault();
               onHeadingClick(current.id);

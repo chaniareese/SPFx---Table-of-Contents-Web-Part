@@ -22,10 +22,10 @@
     width: 280px;
     height: 100%;
     overflow-y: auto;
-    background-color: $ms-color-neutralLighter;
+    background-color: transparent;
     padding: 20px;
     box-sizing: border-box;
-    border-right: 1px solid $ms-color-neutralLight;
+    border: 1px solid $ms-color-neutralTertiary;
 
     h3 {
       font-size: 16px;
@@ -49,8 +49,21 @@
           color: $ms-color-themePrimary;
           text-decoration: none;
           font-size: 14px;
+          font-weight: 400;
           border-radius: 4px;
           transition: all 0.2s ease;
+
+          &.h2Link {
+            font-weight: 700;
+          }
+
+          &.h3Link {
+            font-weight: 500;
+          }
+
+          &.h4Link {
+            font-weight: 400;
+          }
 
           &:hover {
             background-color: $ms-color-themeLight;
@@ -60,7 +73,6 @@
           &.active {
             background-color: $ms-color-themePrimary;
             color: white;
-            font-weight: 600;
           }
         }
 
@@ -96,7 +108,7 @@
     height: calc(100vh - 120px);
     overflow-y: auto;
     background: white;
-    padding: 30px;
+    padding: 0 30px 30px;
     box-sizing: border-box;
 
     .title {
