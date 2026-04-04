@@ -86,19 +86,45 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
 
   private handleScroll = (): void => {
     const { headings } = this.state;
+    const { showH2, showH3, showH4 } = this.props;
     const contentEl = this.contentContainerRef.current;
     if (headings.length === 0 || !contentEl) return;
 
-    let activeId: string | null = null;
+    const isVisible = (level: number): boolean => {
+      if (level === 2) return showH2;
+      if (level === 3) return showH3;
+      if (level === 4) return showH4;
+      return true;
+    };
+
     const containerTop = contentEl.getBoundingClientRect().top;
 
+    // Find the heading the user has scrolled past (regardless of visibility)
+    let scrolledPastIndex = -1;
     for (let i = headings.length - 1; i >= 0; i--) {
       const heading = headings[i];
       if (heading.element) {
         const rect = heading.element.getBoundingClientRect();
         if (rect.top - containerTop <= 80) {
-          activeId = heading.id;
+          scrolledPastIndex = i;
           break;
+        }
+      }
+    }
+
+    let activeId: string | null = null;
+
+    if (scrolledPastIndex !== -1) {
+      // If the scrolled-past heading is visible, use it directly
+      if (isVisible(headings[scrolledPastIndex].level)) {
+        activeId = headings[scrolledPastIndex].id;
+      } else {
+        // Otherwise walk backwards to find the nearest visible ancestor/sibling above
+        for (let i = scrolledPastIndex - 1; i >= 0; i--) {
+          if (isVisible(headings[i].level)) {
+            activeId = headings[i].id;
+            break;
+          }
         }
       }
     }

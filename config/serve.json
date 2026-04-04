@@ -3,5 +3,6 @@
   "port": 4321,
   "https": true,
   "initialPage": "https://teamandtech.sharepoint.com/_layouts/workbench.aspx"
+  // "initialPage": "https://teamandtech.sharepoint.com/sites/DisasterRecovery-BusinessContinuity/SitePages/Internal-Systems.aspx?sw=bypass&Mode=Edit"
 }
 

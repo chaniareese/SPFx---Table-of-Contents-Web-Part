@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useEditor, EditorContent, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import type { ReactNodeViewProps } from '@tiptap/react';
 import { Editor, Extension } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -35,6 +36,9 @@ declare module '@tiptap/core' {
     indent: {
       increaseIndent: () => ReturnType;
       decreaseIndent: () => ReturnType;
+    };
+    bulkCellAttribute: {
+      setBulkCellAttribute: (attr: string, value: unknown) => ReturnType;
     };
   }
 }
@@ -130,35 +134,57 @@ const LineHeight = Extension.create({
 const Indent = Extension.create({
   name: 'indent',
   addOptions() {
-    return { types: ['paragraph', 'heading'], min: 0, max: 6 };
+    return { types: ['paragraph', 'heading'], listTypes: ['listItem'], min: 0, max: 6 };
   },
   addGlobalAttributes() {
-    return [{
-      types: this.options.types,
-      attributes: {
-        indent: {
-          default: 0,
-          parseHTML: (element: HTMLElement) => {
-            const ml = parseInt(element.style.marginLeft || '0', 10);
-            return Math.round(ml / 40) || 0;
-          },
-          renderHTML: (attributes: Record<string, unknown>) => {
-            const indent = attributes.indent as number;
-            if (!indent || indent <= 0) return {};
-            return { style: `margin-left: ${indent * 40}px` };
+    return [
+      {
+        // paragraph and heading — use margin-left
+        types: this.options.types,
+        attributes: {
+          indent: {
+            default: 0,
+            parseHTML: (element: HTMLElement) => {
+              const ml = parseInt(element.style.marginLeft || '0', 10);
+              return Math.round(ml / 40) || 0;
+            },
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const indent = attributes.indent as number;
+              if (!indent || indent <= 0) return {};
+              return { style: `margin-left: ${indent * 40}px` };
+            },
           },
         },
       },
-    }];
+      {
+        // listItem — use padding-left so the marker moves WITH the text
+        types: this.options.listTypes,
+        attributes: {
+          indent: {
+            default: 0,
+            parseHTML: (element: HTMLElement) => {
+              const pl = parseInt(element.style.paddingLeft || '0', 10);
+              return Math.round(pl / 40) || 0;
+            },
+            renderHTML: (attributes: Record<string, unknown>) => {
+              const indent = attributes.indent as number;
+              if (!indent || indent <= 0) return {};
+              return { style: `padding-left: ${indent * 40}px` };
+            },
+          },
+        },
+      },
+    ];
   },
   addCommands() {
+    const allTypes = [...this.options.types, ...this.options.listTypes];
     return {
       increaseIndent: () =>
         ({ tr, state, dispatch }) => {
           const { from, to } = state.selection;
           let updated = false;
           state.doc.nodesBetween(from, to, (node, pos) => {
-            if (this.options.types.includes(node.type.name)) {
+            if (allTypes.includes(node.type.name)) {
               const cur = (node.attrs.indent as number) || 0;
               if (cur < this.options.max) {
                 tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: cur + 1 });
@@ -174,7 +200,7 @@ const Indent = Extension.create({
           const { from, to } = state.selection;
           let updated = false;
           state.doc.nodesBetween(from, to, (node, pos) => {
-            if (this.options.types.includes(node.type.name)) {
+            if (allTypes.includes(node.type.name)) {
               const cur = (node.attrs.indent as number) || 0;
               if (cur > this.options.min) {
                 tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: cur - 1 });
@@ -267,6 +293,107 @@ const CustomTableHeader = TableHeader.extend({
       },
     };
   },
+});
+
+/* ------------------------------------------------------------------ */
+/*  Bulk Cell Attribute Extension                                      */
+/*  Applies a cell attribute to ALL selected cells, not just current  */
+/*  Handles both CellSelection (multi-cell drag) and cursor position  */
+/* ------------------------------------------------------------------ */
+
+const BulkCellAttribute = Extension.create({
+  name: 'bulkCellAttribute',
+  addCommands() {
+    return {
+      setBulkCellAttribute: (attr: string, value: unknown) =>
+        ({ tr, state, dispatch }) => {
+          const { selection } = state;
+          const cellNodeTypes = ['tableCell', 'tableHeader'];
+          let updated = false;
+
+          // Use constructor name — $cellAnchor is on prototype, not own property
+          const isCellSelection = selection.constructor?.name === 'CellSelection';
+
+          if (isCellSelection) {
+            // Iterate from selection.from to selection.to
+            // CellSelection exposes standard from/to that covers all selected cells
+            state.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+              if (cellNodeTypes.includes(node.type.name)) {
+                tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: value });
+                updated = true;
+                return false; // don't descend into cell content
+              }
+              return true;
+            });
+          }
+
+          // Fallback for single cell / regular cursor
+          if (!updated) {
+            const { $from } = selection;
+            for (let d = $from.depth; d >= 0; d--) {
+              const node = $from.node(d);
+              if (cellNodeTypes.includes(node.type.name)) {
+                const pos = $from.before(d);
+                tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: value });
+                updated = true;
+                break;
+              }
+            }
+          }
+
+          if (updated && dispatch) dispatch(tr);
+          return updated;
+        },
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/*  Cell Position Tracker                                              */
+/*  ProseMirror plugin — tracks selected cell positions INSIDE the    */
+/*  editor before focus is lost. Stored in module-level array so      */
+/*  TableToolbar can read them after blur.                            */
+/* ------------------------------------------------------------------ */
+
+const lastSelectedCellPositions: number[] = [];
+const cellTrackerKey = new PluginKey('cellTracker');
+
+const CellTracker = Extension.create({
+  name: 'cellTracker',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: cellTrackerKey,
+        view() {
+          return {
+            update(view) {
+              const { selection } = view.state;
+              const cellNodeTypes = ['tableCell', 'tableHeader'];
+              const isCellSel = selection.constructor?.name === 'CellSelection';
+              if (isCellSel) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const ranges = (selection as any).ranges as Array<{ $from: any }>;
+                lastSelectedCellPositions.length = 0;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ranges.forEach((range: any) => {
+                  const $from = range.$from;
+                  for (let d = $from.depth; d >= 0; d--) {
+                    if (cellNodeTypes.includes($from.node(d).type.name)) {
+                      const pos = $from.before(d);
+                      if (!lastSelectedCellPositions.includes(pos)) {
+                        lastSelectedCellPositions.push(pos);
+                      }
+                      break;
+                    }
+                  }
+                });
+              }
+            }
+          };
+        }
+      })
+    ];
+  }
 });
 
 /* ------------------------------------------------------------------ */
@@ -482,13 +609,14 @@ const ColorPicker: React.FC<IColorPickerProps> = ({ colors, activeColor, onSelec
             key={c}
             className={`${styles.colorSwatch} ${activeColor === c ? styles.activeSwatch : ''}`}
             style={{ backgroundColor: c, border: c === '#ffffff' ? '1px solid #ccc' : undefined }}
+            onMouseDown={e => e.preventDefault()}
             onClick={() => { onSelect(c); onClose(); }}
             title={c}
           />
         ))}
       </div>
       {onClear && (
-        <button className={styles.colorClear} onClick={() => { if (onClear) onClear(); onClose(); }}>
+        <button className={styles.colorClear} onMouseDown={e => e.preventDefault()} onClick={() => { if (onClear) onClear(); onClose(); }}>
           No color
         </button>
       )}
@@ -817,11 +945,11 @@ const FontSizeDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   if (currentSize) {
     currentNum = parseInt(currentSize, 10);
   } else if (editor.isActive('heading', { level: 2 })) {
-    currentNum = 28;
-  } else if (editor.isActive('heading', { level: 3 })) {
     currentNum = 24;
-  } else if (editor.isActive('heading', { level: 4 })) {
+  } else if (editor.isActive('heading', { level: 3 })) {
     currentNum = 20;
+  } else if (editor.isActive('heading', { level: 4 })) {
+    currentNum = 18;
   } else {
     currentNum = 16;
   }
@@ -1103,12 +1231,64 @@ const TextToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
 /*  TABLE TOOLBAR                                                      */
 /* ------------------------------------------------------------------ */
 
+// Helper: get positions of all selected cells
+// Reads from lastSelectedCellPositions tracked by CellTracker plugin
+// — these are captured INSIDE the editor before focus/blur resets selection
+function getSelectedCellPositions(editor: Editor): number[] {
+  const cellNodeTypes = ['tableCell', 'tableHeader'];
+
+  // Use plugin-tracked positions — most reliable, survives focus loss
+  if (lastSelectedCellPositions.length > 0) {
+    return [...lastSelectedCellPositions];
+  }
+
+  // Fallback: single cell at cursor
+  const positions: number[] = [];
+  const { $from } = editor.state.selection;
+  for (let d = $from.depth; d >= 0; d--) {
+    if (cellNodeTypes.includes($from.node(d).type.name)) {
+      positions.push($from.before(d));
+      break;
+    }
+  }
+  return positions;
+}
+
 const TableToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
   const [showBorderColor, setShowBorderColor] = React.useState(false);
   const [showCellBg, setShowCellBg] = React.useState(false);
+  // Store cell positions at mousedown time — before focus changes
+  const cellPositionsRef = React.useRef<number[]>([]);
+
+  const applyAttr = (attr: string, value: unknown): void => {
+    const positions = cellPositionsRef.current.length > 0
+      ? cellPositionsRef.current
+      : getSelectedCellPositions(editor);
+
+    if (positions.length === 0) return;
+
+    const { state, view } = editor;
+    const tr = state.tr;
+    positions.forEach(pos => {
+      const node = state.doc.nodeAt(pos);
+      if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, [attr]: value });
+    });
+    view.dispatch(tr);
+  };
 
   return (
-    <div className={styles.tableToolbar}>
+    <div
+      className={styles.tableToolbar}
+      onMouseDown={(e) => {
+        // Capture selected cell positions BEFORE any focus/blur happens
+        cellPositionsRef.current = getSelectedCellPositions(editor);
+        // Prevent blur for buttons — but allow select dropdowns to work
+        const tag = (e.target as HTMLElement).tagName.toLowerCase();
+        if (tag !== 'select' && tag !== 'option') {
+          e.preventDefault();
+        }
+      }}
+    >
       {/* ── Add row/col ── */}
       <div className={styles.tbGroup}>
         <Btn title="Add row above" onClick={() => editor.chain().focus().addRowBefore().run()}>{I.addRowAbove}</Btn>
@@ -1133,7 +1313,7 @@ const TableToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
       {/* ── Border style ── */}
       <div className={styles.tbGroup}>
         <select className={styles.tbSelect} defaultValue="solid"
-          onChange={e => editor.chain().focus().setCellAttribute('borderStyle', e.target.value).run()}>
+          onChange={e => applyAttr('borderStyle', e.target.value)}>
           {BORDER_STYLES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
         </select>
       </div>
@@ -1146,7 +1326,7 @@ const TableToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
           </Btn>
           {showBorderColor && (
             <ColorPicker colors={COLORS.slice(0, 20)}
-              onSelect={c => editor.chain().focus().setCellAttribute('borderColor', c).run()}
+              onSelect={c => { applyAttr('borderColor', c); setShowBorderColor(false); }}
               onClose={() => setShowBorderColor(false)} />
           )}
         </div>
@@ -1156,8 +1336,8 @@ const TableToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
           </Btn>
           {showCellBg && (
             <ColorPicker colors={COLORS}
-              onSelect={c => editor.chain().focus().setCellAttribute('backgroundColor', c).run()}
-              onClear={() => editor.chain().focus().setCellAttribute('backgroundColor', null).run()}
+              onSelect={c => { applyAttr('backgroundColor', c); setShowCellBg(false); }}
+              onClear={() => { applyAttr('backgroundColor', null); setShowCellBg(false); }}
               onClose={() => setShowCellBg(false)} />
           )}
         </div>
@@ -1166,7 +1346,7 @@ const TableToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
       {/* ── Cell padding ── */}
       <div className={styles.tbGroup}>
         <select className={styles.tbSelect} defaultValue="8px 12px"
-          onChange={e => editor.chain().focus().setCellAttribute('cellPadding', e.target.value).run()}>
+          onChange={e => applyAttr('cellPadding', e.target.value)}>
           {CELL_PADDINGS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
       </div>
@@ -1214,6 +1394,8 @@ export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, 
       TableRow,
       CustomTableCell,
       CustomTableHeader,
+      BulkCellAttribute,
+      CellTracker,
       Placeholder.configure({ placeholder: placeholder || 'Start writing your content here…' }),
       LineHeight,
       Indent,
