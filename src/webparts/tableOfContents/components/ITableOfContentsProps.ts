@@ -1,3 +1,5 @@
+import { WebPartContext } from '@microsoft/sp-webpart-base';
+
 export interface ITableOfContentsProps {
   // Content stored in web part properties
   content: string;
@@ -18,4 +20,9 @@ export interface ITableOfContentsProps {
   
   // Display mode (Edit or Read)
   displayMode: number;
+
+  // SharePoint context — needed for ReviewDateNode, LastUpdatedNode, VersionNode
+  siteUrl: string;
+  pageId: number | undefined;
+  context: WebPartContext;
 }

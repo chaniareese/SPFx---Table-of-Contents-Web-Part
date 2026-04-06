@@ -14,4 +14,7 @@ export interface ITableOfContentsState {
   
   // Content being edited
   editorContent: string;
+
+  // View mode content — dynamic node spans replaced with live values
+  viewContent: string;
 }

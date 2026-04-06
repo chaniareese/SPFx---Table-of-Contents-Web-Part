@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { useEditor, EditorContent, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 import type { ReactNodeViewProps } from '@tiptap/react';
-import { Editor, Extension } from '@tiptap/core';
+import { Editor, Extension, Node as TipTapNode } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { Table } from '@tiptap/extension-table';
@@ -18,6 +18,7 @@ import Image from '@tiptap/extension-image';
 import Superscript from '@tiptap/extension-superscript';
 import Subscript from '@tiptap/extension-subscript';
 import Placeholder from '@tiptap/extension-placeholder';
+import { SPHttpClient } from '@microsoft/sp-http';
 import styles from './TipTapEditor.module.scss';
 
 /* ------------------------------------------------------------------ */
@@ -396,6 +397,358 @@ const CellTracker = Extension.create({
   }
 });
 
+
+/* ------------------------------------------------------------------ */
+/*  Section 15 Dynamic Nodes                                           */
+/*  ReviewDateNode, LastUpdatedNode, VersionNode                       */
+/*  Read-only inline nodes that fetch live data from RunbookReviews    */
+/* ------------------------------------------------------------------ */
+
+// Module-level cache — one fetch per page load, shared across all three nodes
+let reviewRecordsCache: Promise<{ reviewedDate: string; nextReviewDate: string; count: number }> | null = null;
+let reviewRecordsCacheKey = '';
+
+// Shared fetch function — gets all review records for a given page ID
+// Uses module-level cache so all three nodes share one fetch, not three
+async function fetchReviewRecords(siteUrl: string, pageId: number): Promise<{
+  reviewedDate: string;
+  nextReviewDate: string;
+  count: number;
+}> {
+  const cacheKey = `${siteUrl}__${pageId}`;
+
+  // Return cached promise if same page — prevents multiple fetches
+  if (reviewRecordsCache && reviewRecordsCacheKey === cacheKey) {
+    return reviewRecordsCache;
+  }
+
+  const url = `${siteUrl}/_api/web/lists/getbytitle('RunbookReviews')/items` +
+    `?$select=ReviewedDate,NextReviewDate` +
+    `&$filter=RunbookPageId eq ${pageId}` +
+    `&$orderby=ReviewedDate desc` +
+    `&$top=500`;
+
+  reviewRecordsCacheKey = cacheKey;
+  reviewRecordsCache = fetch(url, {
+    headers: { 'Accept': 'application/json;odata=nometadata' },
+    credentials: 'include'
+  })
+  .then(async response => {
+    if (!response.ok) return { reviewedDate: '', nextReviewDate: '', count: 0 };
+    const data = await (response.json() as Promise<{ value: { ReviewedDate: string; NextReviewDate: string }[] }>);
+    const items = data.value || [];
+    const count = items.length;
+    if (count === 0) return { reviewedDate: '', nextReviewDate: '', count: 0 };
+    const latest = items[0];
+    return {
+      reviewedDate: latest.ReviewedDate || '',
+      nextReviewDate: latest.NextReviewDate || '',
+      count
+    };
+  })
+  .catch(() => ({ reviewedDate: '', nextReviewDate: '', count: 0 }));
+
+  return reviewRecordsCache;
+}
+
+function formatDateDisplay(isoString: string): string {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// ── Dynamic Node View Factory ──
+// Creates a raw DOM node view with contenteditable="false" to prevent editing
+// This bypasses ReactNodeViewRenderer's internal contentEditable management
+function createDynamicNodeView(
+  dataType: 'lastUpdated' | 'nextReviewDate' | 'version',
+  siteUrl: string,
+  pageId: number | undefined
+): () => { dom: HTMLElement; update: (node: any) => boolean; destroy: () => void } {
+  return () => {
+    const dom = document.createElement('span');
+    dom.setAttribute('contenteditable', 'false');
+    dom.setAttribute('data-dynamic-node', 'true'); // Mark this as a protected node
+    dom.className = styles.dynamicNode;
+    
+    // Prevent any text input or modification to this node via DOM events
+    const preventEdit = (e: Event): void => {
+      e.preventDefault();
+      e.stopPropagation();
+      dom.textContent = dom.textContent; // Revert to text-only, no elements
+    };
+    
+    dom.addEventListener('beforeinput', preventEdit);
+    dom.addEventListener('input', preventEdit);
+    dom.addEventListener('paste', preventEdit);
+    dom.addEventListener('drop', preventEdit);
+    dom.addEventListener('cut', preventEdit);
+    
+    return {
+      dom,
+      update: (node: { attrs: { fallback: string } }) => {
+        const fallback = node.attrs.fallback || '';
+        
+        // Clear any accidental child nodes and set only text content
+        while (dom.firstChild) {
+          dom.removeChild(dom.firstChild);
+        }
+        
+        // Show fallback initially
+        dom.textContent = fallback || 'Loading...';
+        
+        // Fetch live data if siteUrl and pageId are available
+        if (siteUrl && pageId) {
+          fetchReviewRecords(siteUrl, pageId)
+            .then(data => {
+              if (data.count === 0) {
+                dom.textContent = fallback || '';
+                return;
+              }
+              
+              let displayValue = '';
+              if (dataType === 'lastUpdated') {
+                displayValue = formatDateDisplay(data.reviewedDate) || fallback;
+              } else if (dataType === 'nextReviewDate') {
+                displayValue = formatDateDisplay(data.nextReviewDate) || fallback;
+              } else if (dataType === 'version') {
+                displayValue = `v${data.count + 1}.0`;
+              }
+              
+              dom.textContent = displayValue;
+            })
+            .catch(() => {
+              dom.textContent = fallback || '';
+            });
+        }
+        
+        return true;
+      },
+      destroy: () => {
+        dom.removeEventListener('beforeinput', preventEdit);
+        dom.removeEventListener('input', preventEdit);
+        dom.removeEventListener('paste', preventEdit);
+        dom.removeEventListener('drop', preventEdit);
+        dom.removeEventListener('cut', preventEdit);
+      },
+    };
+  };
+}
+
+// ── ReviewDateNode ──
+// Inline node that renders the Next Review Date from RunbookReviews list.
+// Stored in HTML as: <span data-type="review-date" data-fallback="[typed value]"></span>
+// Uses raw DOM with contenteditable="false" to prevent editing
+
+interface IDynamicNodeOptions {
+  siteUrl: string;
+  pageId: number | undefined;
+}
+
+const ReviewDateNode = TipTapNode.create<IDynamicNodeOptions>({
+  name: 'reviewDate',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+  draggable: false,
+  content: '', // Empty content — no child nodes allowed
+
+  addOptions() {
+    return { siteUrl: '', pageId: undefined };
+  },
+
+  addAttributes() {
+    return {
+      fallback: {
+        default: '',
+        parseHTML: el => el.getAttribute('data-fallback') || '',
+        renderHTML: attrs => ({ 'data-fallback': attrs.fallback || '' }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-type="review-date"]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', { 'data-type': 'review-date', ...HTMLAttributes }];
+  },
+
+  addProseMirrorPlugins() {
+    const nodeName = this.name;
+    return [
+      new Plugin({
+        key: new PluginKey(`blockEdit-${nodeName}`),
+        filterTransaction(tr) {
+          let blockTransaction = false;
+          
+          // Check if any steps in the transaction modify content inside this node type
+          tr.steps.forEach(step => {
+            const stepJSON = step.toJSON();
+            // Block insert, replace, and other content-modifying steps that target this node
+            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
+              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
+                if (node.type.name === nodeName) {
+                  blockTransaction = true;
+                }
+              });
+            }
+          });
+          
+          return !blockTransaction;
+        },
+      }),
+    ];
+  },
+
+  addNodeView() {
+    const { siteUrl, pageId } = this.options;
+    return createDynamicNodeView('nextReviewDate', siteUrl, pageId);
+  },
+});
+
+// ── LastUpdatedNode ──
+// Inline node that renders the Last Updated date (ReviewedDate) from RunbookReviews list.
+// Stored in HTML as: <span data-type="last-updated" data-fallback="[typed value]"></span>
+// Uses raw DOM with contenteditable="false" to prevent editing
+
+const LastUpdatedNode = TipTapNode.create<IDynamicNodeOptions>({
+  name: 'lastUpdated',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+  draggable: false,
+  content: '', // Empty content — no child nodes allowed
+
+  addOptions() {
+    return { siteUrl: '', pageId: undefined };
+  },
+
+  addAttributes() {
+    return {
+      fallback: {
+        default: '',
+        parseHTML: el => el.getAttribute('data-fallback') || '',
+        renderHTML: attrs => ({ 'data-fallback': attrs.fallback || '' }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-type="last-updated"]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', { 'data-type': 'last-updated', ...HTMLAttributes }];
+  },
+
+  addProseMirrorPlugins() {
+    const nodeName = this.name;
+    return [
+      new Plugin({
+        key: new PluginKey(`blockEdit-${nodeName}`),
+        filterTransaction(tr) {
+          let blockTransaction = false;
+          
+          // Check if any steps in the transaction modify content inside this node type
+          tr.steps.forEach(step => {
+            const stepJSON = step.toJSON();
+            // Block insert, replace, and other content-modifying steps that target this node
+            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
+              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
+                if (node.type.name === nodeName) {
+                  blockTransaction = true;
+                }
+              });
+            }
+          });
+          
+          return !blockTransaction;
+        },
+      }),
+    ];
+  },
+
+  addNodeView() {
+    const { siteUrl, pageId } = this.options;
+    return createDynamicNodeView('lastUpdated', siteUrl, pageId);
+  },
+});
+
+// ── VersionNode ──
+// Inline node that renders the auto-incremented version from RunbookReviews list.
+// Stored in HTML as: <span data-type="version" data-fallback="[typed value]"></span>
+// Uses raw DOM with contenteditable="false" to prevent editing
+
+const VersionNode = TipTapNode.create<IDynamicNodeOptions>({
+  name: 'version',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: false,
+  draggable: false,
+  content: '', // Empty content — no child nodes allowed
+
+  addOptions() {
+    return { siteUrl: '', pageId: undefined };
+  },
+
+  addAttributes() {
+    return {
+      fallback: {
+        default: '',
+        parseHTML: el => el.getAttribute('data-fallback') || '',
+        renderHTML: attrs => ({ 'data-fallback': attrs.fallback || '' }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'span[data-type="version"]' }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', { 'data-type': 'version', ...HTMLAttributes }];
+  },
+
+  addProseMirrorPlugins() {
+    const nodeName = this.name;
+    return [
+      new Plugin({
+        key: new PluginKey(`blockEdit-${nodeName}`),
+        filterTransaction(tr) {
+          let blockTransaction = false;
+          
+          // Check if any steps in the transaction modify content inside this node type
+          tr.steps.forEach(step => {
+            const stepJSON = step.toJSON();
+            // Block insert, replace, and other content-modifying steps that target this node
+            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
+              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
+                if (node.type.name === nodeName) {
+                  blockTransaction = true;
+                }
+              });
+            }
+          });
+          
+          return !blockTransaction;
+        },
+      }),
+    ];
+  },
+
+  addNodeView() {
+    const { siteUrl, pageId } = this.options;
+    return createDynamicNodeView('version', siteUrl, pageId);
+  },
+});
+
+
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
@@ -595,7 +948,7 @@ const ColorPicker: React.FC<IColorPickerProps> = ({ colors, activeColor, onSelec
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -633,7 +986,7 @@ const TableGridSelector: React.FC<ITableGridProps> = ({ onSelect, onClose }) => 
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -673,7 +1026,7 @@ const LinkInput: React.FC<ILinkInputProps> = ({ initialUrl, onSubmit, onRemove, 
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -836,7 +1189,7 @@ const ImageInsert: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (popupRef.current && !popupRef.current.contains(e.target as Node)) setShowPopup(false);
+      if (popupRef.current && !popupRef.current.contains(e.target as unknown as globalThis.Node)) setShowPopup(false);
     };
     if (showPopup) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -934,7 +1287,7 @@ const FontSizeDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) setShow(false);
     };
     if (show) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -991,7 +1344,7 @@ const AlignDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) setShow(false);
     };
     if (show) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -1030,7 +1383,7 @@ const ListDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
 
   React.useEffect(() => {
     const handler = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setShow(false);
+      if (ref.current && !ref.current.contains(e.target as unknown as globalThis.Node)) setShow(false);
     };
     if (show) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -1057,11 +1410,73 @@ const ListDropdown: React.FC<{ editor: Editor }> = ({ editor }) => {
   );
 };
 
+
+/* ------------------------------------------------------------------ */
+/*  Documentation & Version Control Block                             */
+/*  Inserts a pre-built table with editable + dynamic node fields     */
+/* ------------------------------------------------------------------ */
+
+function insertDocVersionBlock(editor: Editor, siteUrl: string, pageId: number | undefined): void {
+  // Build the table HTML with dynamic node spans for auto fields
+  // and empty cells for editable fields
+  // Use a single-line compact string to prevent TipTap from inserting extra paragraph nodes
+  // Wrap dynamic node spans in <p> tags — TipTap tableCell requires block content (paragraph)
+  const tableHTML = '<table style="width:100%;border-collapse:collapse;"><tbody>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;width:40%;border:1px solid #edebe9;"><p>Runbook Author</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Created Date</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Last Updated</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="last-updated" data-fallback=""></span></p></td></tr>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Version</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="version" data-fallback="v1.0"></span></p></td></tr>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Next Review Date</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="review-date" data-fallback=""></span></p></td></tr>'
+    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Storage Location</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
+    + '</tbody></table>';
+
+  editor.chain().focus().insertContent(tableHTML).run();
+}
+
+// Check if doc/version block already exists in editor content
+function docVersionBlockExists(editor: Editor): boolean {
+  let found = false;
+  editor.state.doc.descendants(node => {
+    if (
+      node.type.name === 'reviewDate' ||
+      node.type.name === 'lastUpdated' ||
+      node.type.name === 'version'
+    ) {
+      found = true;
+      return false; // stop traversal
+    }
+  });
+  return found;
+}
+
+// Toolbar button component for inserting the Doc & Version block
+const DocVersionBlockBtn: React.FC<{ editor: Editor; siteUrl: string; pageId: number | undefined }> = ({ editor, siteUrl, pageId }) => {
+  const alreadyExists = docVersionBlockExists(editor);
+  return (
+    <Btn
+      title={alreadyExists ? 'Documentation & Version Control block already added' : 'Insert Documentation & Version Control block'}
+      disabled={alreadyExists}
+      onClick={() => insertDocVersionBlock(editor, siteUrl, pageId)}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="1.5" y="2" width="13" height="12" rx="1.2"/>
+        <line x1="1.5" y1="5.5" x2="14.5" y2="5.5"/>
+        <line x1="5.5" y1="2" x2="5.5" y2="14"/>
+        <circle cx="3.5" cy="3.8" r="0.6" fill="currentColor"/>
+        <circle cx="3.5" cy="7.7" r="0.6" fill="currentColor"/>
+        <circle cx="3.5" cy="10" r="0.6" fill="currentColor"/>
+        <circle cx="3.5" cy="12.2" r="0.6" fill="currentColor"/>
+        <path d="M11 4v2.5M9.8 5.2h2.4" strokeWidth="1.3"/>
+      </svg>
+    </Btn>
+  );
+};
+
 /* ------------------------------------------------------------------ */
 /*  TEXT TOOLBAR                                                       */
 /* ------------------------------------------------------------------ */
 
-const TextToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
+const TextToolbar: React.FC<{ editor: Editor; siteUrl: string; pageId: number | undefined }> = ({ editor, siteUrl, pageId }) => {
   const [showFontColor, setShowFontColor] = React.useState(false);
   const [showHighlight, setShowHighlight] = React.useState(false);
   const [showTableGrid, setShowTableGrid] = React.useState(false);
@@ -1203,7 +1618,7 @@ const TextToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
         </select>
       </div>
 
-      {/* ── Image / Table ── */}
+      {/* ── Image / Table / Doc-Version block ── */}
       <div className={styles.tbGroup}>
         <ImageInsert editor={editor} />
         <div className={styles.tbDropWrap}>
@@ -1215,6 +1630,7 @@ const TextToolbar: React.FC<{ editor: Editor }> = ({ editor }) => {
               onClose={() => setShowTableGrid(false)} />
           )}
         </div>
+        <DocVersionBlockBtn editor={editor} siteUrl={siteUrl} pageId={pageId} />
       </div>
 
       {/* ── Clear formatting ── */}
@@ -1368,9 +1784,11 @@ export interface ITipTapEditorProps {
   content: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  siteUrl?: string;
+  pageId?: number;
 }
 
-export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, placeholder }) => {
+export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, placeholder, siteUrl, pageId }) => {
   const lastContentRef = React.useRef(content);
   const [, forceUpdate] = React.useState(0);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
@@ -1396,6 +1814,9 @@ export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, 
       CustomTableHeader,
       BulkCellAttribute,
       CellTracker,
+      ReviewDateNode.configure({ siteUrl: siteUrl || '', pageId }),
+      LastUpdatedNode.configure({ siteUrl: siteUrl || '', pageId }),
+      VersionNode.configure({ siteUrl: siteUrl || '', pageId }),
       Placeholder.configure({ placeholder: placeholder || 'Start writing your content here…' }),
       LineHeight,
       Indent,
@@ -1422,6 +1843,7 @@ export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, 
       lastContentRef.current = content;
     }
   }, [content, editor]);
+
 
   if (!editor) return null;
 
@@ -1454,7 +1876,7 @@ export const TipTapEditor: React.FC<ITipTapEditorProps> = ({ content, onChange, 
 
   return (
     <div className={styles.editorWrapper} ref={wrapperRef}>
-      <TextToolbar editor={editor} />
+      <TextToolbar editor={editor} siteUrl={siteUrl || ''} pageId={pageId} />
       <EditorContent editor={editor} className={styles.editorContent} />
       {isInTable && tableToolbarStyle && (
         <div style={tableToolbarStyle}>

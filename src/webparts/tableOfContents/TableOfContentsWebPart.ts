@@ -36,7 +36,10 @@ export default class TableOfContentsWebPart extends BaseClientSideWebPart<ITable
         displayMode: this.displayMode,
         updateProperty: (value: string) => {
           this.properties.content = value;
-        }
+        },
+        siteUrl: this.context.pageContext.web.absoluteUrl,
+        pageId: this.context.pageContext.listItem?.id,
+        context: this.context
       }
     );
 

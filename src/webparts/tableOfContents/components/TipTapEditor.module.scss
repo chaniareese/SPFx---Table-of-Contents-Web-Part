@@ -723,3 +723,24 @@
     }
   }
 }
+
+// ── Dynamic Section 15 Nodes ─────────────────────────────────────────
+// ReviewDateNode, LastUpdatedNode, VersionNode
+// Read-only inline nodes — visually identical to surrounding text
+.dynamicNode {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  line-height: inherit;
+  cursor: default;
+  user-select: none;
+
+  // Subtle underline in edit mode to indicate it's a managed field
+  border-bottom: 1px dashed #a19f9d;
+
+  &:hover {
+    background: rgba(0, 120, 212, 0.06);
+    border-radius: 2px;
+  }
+}

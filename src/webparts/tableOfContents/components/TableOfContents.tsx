@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { SPHttpClient, SPHttpClientResponse } from '@microsoft/sp-http';
 import styles from './TableOfContents.module.scss';
 import { ITableOfContentsProps } from './ITableOfContentsProps';
 import { ITableOfContentsState, IHeading } from './ITableOfContentsState';
@@ -19,12 +20,14 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     this.state = {
       headings: [],
       activeHeadingId: null,
-      editorContent: props.content || ''
+      editorContent: props.content || '',
+      viewContent: props.content || ''
     };
   }
 
   public componentDidMount(): void {
     this.extractHeadings();
+    this.buildViewContent();
     this.scanInterval = setInterval(() => this.extractHeadings(), 2000);
     const contentEl = this.contentContainerRef.current;
     if (contentEl) {
@@ -45,7 +48,95 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     if (prevProps.content !== this.props.content) {
       this.extractHeadings();
       this.setState({ editorContent: this.props.content });
+      this.buildViewContent();
     }
+  }
+
+
+  // Build view mode content — replaces dynamic node spans with live data from RunbookReviews
+  private buildViewContent(): void {
+    const { siteUrl, pageId, content } = this.props;
+    if (!siteUrl || !pageId) {
+      this.setState({ viewContent: content });
+      return;
+    }
+
+    const url = `${siteUrl}/_api/web/lists/getbytitle('RunbookReviews')/items` +
+      `?$select=ReviewedDate,NextReviewDate` +
+      `&$filter=RunbookPageId eq ${pageId}` +
+      `&$orderby=ReviewedDate desc` +
+      `&$top=500`;
+
+    this.props.context.spHttpClient
+      .get(url, SPHttpClient.configurations.v1)
+      .then((r: SPHttpClientResponse) => r.json())
+      .then((data: { value: { ReviewedDate: string; NextReviewDate: string }[] }) => {
+        const items = data.value || [];
+        const count = items.length;
+        const latest = count > 0 ? items[0] : null;
+
+        const formatDate = (iso: string): string => {
+          if (!iso) return '';
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return '';
+          return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        };
+
+        // Replace dynamic node spans in HTML with actual values
+        let html = content;
+
+        if (latest) {
+          const lastUpdated = formatDate(latest.ReviewedDate);
+          const nextReview = formatDate(latest.NextReviewDate);
+          const version = `v${count + 1}.0`;
+
+          // Replace last-updated spans
+          html = html.replace(
+            /<span[^>]*data-type="last-updated"[^>]*data-fallback="([^"]*)"[^>]*><\/span>/gi,
+            lastUpdated || '$1'
+          );
+          // Also handle reversed attribute order
+          html = html.replace(
+            /<span[^>]*data-fallback="([^"]*)"[^>]*data-type="last-updated"[^>]*><\/span>/gi,
+            lastUpdated || '$1'
+          );
+
+          // Replace review-date spans
+          html = html.replace(
+            /<span[^>]*data-type="review-date"[^>]*data-fallback="([^"]*)"[^>]*><\/span>/gi,
+            nextReview || '$1'
+          );
+          html = html.replace(
+            /<span[^>]*data-fallback="([^"]*)"[^>]*data-type="review-date"[^>]*><\/span>/gi,
+            nextReview || '$1'
+          );
+
+          // Replace version spans
+          html = html.replace(
+            /<span[^>]*data-type="version"[^>]*data-fallback="([^"]*)"[^>]*><\/span>/gi,
+            version
+          );
+          html = html.replace(
+            /<span[^>]*data-fallback="([^"]*)"[^>]*data-type="version"[^>]*><\/span>/gi,
+            version
+          );
+        } else {
+          // No review records — replace spans with their fallback values
+          html = html.replace(
+            /<span[^>]*data-type="(?:last-updated|review-date|version)"[^>]*data-fallback="([^"]*)"[^>]*><\/span>/gi,
+            '$1'
+          );
+          html = html.replace(
+            /<span[^>]*data-fallback="([^"]*)"[^>]*data-type="(?:last-updated|review-date|version)"[^>]*><\/span>/gi,
+            '$1'
+          );
+        }
+
+        this.setState({ viewContent: html });
+      })
+      .catch(() => {
+        this.setState({ viewContent: content });
+      });
   }
 
   private extractHeadings = (): void => {
@@ -68,13 +159,23 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
       const text = htmlElement.innerText || htmlElement.textContent || '';
       if (!text.trim()) return;
 
-      let id = htmlElement.id;
-      if (!id) {
-        id = `heading-${level}-${index}`;
-        htmlElement.id = id;
+      // Generate stable ID based on heading content + level + index
+      // Use data attribute to survive TipTap DOM re-renders
+      const stableId = `toc-${level}-${index}-${text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const existingId = htmlElement.getAttribute('data-toc-id');
+      const id = existingId || stableId;
+      
+      if (!existingId) {
+        htmlElement.setAttribute('data-toc-id', id);
+        // Also set DOM id as fallback for direct getElementById calls
+        if (!htmlElement.id) {
+          htmlElement.id = id;
+        }
       }
 
-      headings.push({ id, text: text.trim(), level, element: htmlElement });
+      // Don't store element reference - it becomes stale after TipTap re-renders
+      // We'll look up elements fresh on each scroll event
+      headings.push({ id, text: text.trim(), level, element: undefined });
     });
 
     const nextSig = headings.map(h => `${h.id}|${h.level}|${h.text}`).join('||');
@@ -98,29 +199,41 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     };
 
     const containerTop = contentEl.getBoundingClientRect().top;
+    let activeId: string | null = null;
 
-    // Find the heading the user has scrolled past (regardless of visibility)
-    let scrolledPastIndex = -1;
-    for (let i = headings.length - 1; i >= 0; i--) {
+    // Look through headings and find which one is currently in view
+    // Find the topmost heading that has scrolled into view
+    let topHeadingIndex = -1;
+    let topHeadingDistance = Infinity;
+
+    for (let i = 0; i < headings.length; i++) {
       const heading = headings[i];
-      if (heading.element) {
-        const rect = heading.element.getBoundingClientRect();
-        if (rect.top - containerTop <= 80) {
-          scrolledPastIndex = i;
-          break;
+      // Look up fresh element using data-toc-id to avoid stale references
+      const element = contentEl.querySelector(`[data-toc-id="${heading.id}"]`) as HTMLElement | null;
+      
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        const distanceFromTop = rect.top - containerTop;
+        
+        // Find heading closest to top of viewport that has scrolled past it
+        if (distanceFromTop <= 80 && distanceFromTop > -1000) {
+          if (distanceFromTop > topHeadingDistance || topHeadingIndex === -1) {
+            topHeadingIndex = i;
+            topHeadingDistance = distanceFromTop;
+          }
         }
       }
     }
 
-    let activeId: string | null = null;
-
-    if (scrolledPastIndex !== -1) {
-      // If the scrolled-past heading is visible, use it directly
-      if (isVisible(headings[scrolledPastIndex].level)) {
-        activeId = headings[scrolledPastIndex].id;
+    // If we found a heading currently in view range
+    if (topHeadingIndex !== -1) {
+      const activeHeading = headings[topHeadingIndex];
+      // If the current heading is visible in TOC, use it
+      if (isVisible(activeHeading.level)) {
+        activeId = activeHeading.id;
       } else {
-        // Otherwise walk backwards to find the nearest visible ancestor/sibling above
-        for (let i = scrolledPastIndex - 1; i >= 0; i--) {
+        // Otherwise walk backwards to find the nearest visible parent
+        for (let i = topHeadingIndex; i >= 0; i--) {
           if (isVisible(headings[i].level)) {
             activeId = headings[i].id;
             break;
@@ -136,14 +249,20 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
 
   private handleTOCClick = (id: string): void => {
     const contentEl = this.contentContainerRef.current;
-    const target = document.getElementById(id);
+    // Look for element by data-toc-id first (survives re-renders), fall back to id
+    let target = contentEl?.querySelector(`[data-toc-id="${id}"]`) as HTMLElement | null;
+    if (!target) {
+      target = document.getElementById(id);
+    }
     if (contentEl && target) {
       const scrollTop = contentEl.scrollTop;
       const containerTop = contentEl.getBoundingClientRect().top;
       const targetTop = target.getBoundingClientRect().top;
-      const absoluteTargetTop = scrollTop + targetTop - containerTop - 10;
+      const absoluteTargetTop = scrollTop + targetTop - containerTop - 100;
       contentEl.scrollTo({ top: absoluteTargetTop, behavior: 'smooth' });
       this.setState({ activeHeadingId: id });
+      // Trigger scroll detection after scroll completes
+      setTimeout(() => this.handleScroll(), 800);
     }
   };
 
@@ -192,13 +311,15 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
                 content={editorContent}
                 onChange={this.handleEditorChange}
                 placeholder="Start writing your content here… Use Heading 2, 3, or 4 for sections that will appear in the Table of Contents."
+                siteUrl={this.props.siteUrl}
+                pageId={this.props.pageId}
               />
             </div>
           ) : (
             <div
               className={styles.contentDisplay}
               ref={this.contentRef}
-              dangerouslySetInnerHTML={{ __html: editorContent }}
+              dangerouslySetInnerHTML={{ __html: this.state.viewContent }}
             />
           )}
         </div>
