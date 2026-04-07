@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import type { ReactNodeViewProps } from '@tiptap/react';
 import { Editor, Extension, Node as TipTapNode } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
@@ -227,34 +227,40 @@ const CustomTableCell = TableCell.extend({
       backgroundColor: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.backgroundColor || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.backgroundColor ? { style: `background-color: ${a.backgroundColor}` } : {},
+        renderHTML: () => ({}), // handled in combined style below
       },
       borderStyle: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.borderStyle || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.borderStyle ? { style: `border-style: ${a.borderStyle}` } : {},
+        renderHTML: () => ({}),
       },
       borderColor: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.borderColor || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.borderColor ? { style: `border-color: ${a.borderColor}` } : {},
+        renderHTML: () => ({}),
       },
       cellPadding: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.padding || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.cellPadding ? { style: `padding: ${a.cellPadding}` } : {},
+        renderHTML: () => ({}),
       },
       verticalAlign: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.verticalAlign || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.verticalAlign ? { style: `vertical-align: ${a.verticalAlign}` } : {},
+        renderHTML: () => ({}),
       },
     };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    // Merge all custom style attributes into a single style string
+    const parts: string[] = [];
+    if (node.attrs.backgroundColor) parts.push(`background-color: ${node.attrs.backgroundColor}`);
+    if (node.attrs.borderStyle) parts.push(`border-style: ${node.attrs.borderStyle}`);
+    if (node.attrs.borderColor) parts.push(`border-color: ${node.attrs.borderColor}`);
+    if (node.attrs.cellPadding) parts.push(`padding: ${node.attrs.cellPadding}`);
+    if (node.attrs.verticalAlign) parts.push(`vertical-align: ${node.attrs.verticalAlign}`);
+    const styleStr = parts.join('; ');
+    return ['td', { ...HTMLAttributes, ...(styleStr ? { style: styleStr } : {}) }, 0];
   },
 });
 
@@ -265,34 +271,39 @@ const CustomTableHeader = TableHeader.extend({
       backgroundColor: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.backgroundColor || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.backgroundColor ? { style: `background-color: ${a.backgroundColor}` } : {},
+        renderHTML: () => ({}),
       },
       borderStyle: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.borderStyle || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.borderStyle ? { style: `border-style: ${a.borderStyle}` } : {},
+        renderHTML: () => ({}),
       },
       borderColor: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.borderColor || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.borderColor ? { style: `border-color: ${a.borderColor}` } : {},
+        renderHTML: () => ({}),
       },
       cellPadding: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.padding || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.cellPadding ? { style: `padding: ${a.cellPadding}` } : {},
+        renderHTML: () => ({}),
       },
       verticalAlign: {
         default: null,
         parseHTML: (el: HTMLElement) => el.style.verticalAlign || null,
-        renderHTML: (a: Record<string, unknown>) =>
-          a.verticalAlign ? { style: `vertical-align: ${a.verticalAlign}` } : {},
+        renderHTML: () => ({}),
       },
     };
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    const parts: string[] = [];
+    if (node.attrs.backgroundColor) parts.push(`background-color: ${node.attrs.backgroundColor}`);
+    if (node.attrs.borderStyle) parts.push(`border-style: ${node.attrs.borderStyle}`);
+    if (node.attrs.borderColor) parts.push(`border-color: ${node.attrs.borderColor}`);
+    if (node.attrs.cellPadding) parts.push(`padding: ${node.attrs.cellPadding}`);
+    if (node.attrs.verticalAlign) parts.push(`vertical-align: ${node.attrs.verticalAlign}`);
+    const styleStr = parts.join('; ');
+    return ['th', { ...HTMLAttributes, ...(styleStr ? { style: styleStr } : {}) }, 0];
   },
 });
 
@@ -458,88 +469,54 @@ function formatDateDisplay(isoString: string): string {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// ── Dynamic Node View Factory ──
-// Creates a raw DOM node view with contenteditable="false" to prevent editing
-// This bypasses ReactNodeViewRenderer's internal contentEditable management
-function createDynamicNodeView(
-  dataType: 'lastUpdated' | 'nextReviewDate' | 'version',
-  siteUrl: string,
-  pageId: number | undefined
-): () => { dom: HTMLElement; update: (node: any) => boolean; destroy: () => void } {
-  return () => {
-    const dom = document.createElement('span');
-    dom.setAttribute('contenteditable', 'false');
-    dom.setAttribute('data-dynamic-node', 'true'); // Mark this as a protected node
-    dom.className = styles.dynamicNode;
-    
-    // Prevent any text input or modification to this node via DOM events
-    const preventEdit = (e: Event): void => {
-      e.preventDefault();
-      e.stopPropagation();
-      dom.textContent = dom.textContent; // Revert to text-only, no elements
-    };
-    
-    dom.addEventListener('beforeinput', preventEdit);
-    dom.addEventListener('input', preventEdit);
-    dom.addEventListener('paste', preventEdit);
-    dom.addEventListener('drop', preventEdit);
-    dom.addEventListener('cut', preventEdit);
-    
-    return {
-      dom,
-      update: (node: { attrs: { fallback: string } }) => {
-        const fallback = node.attrs.fallback || '';
-        
-        // Clear any accidental child nodes and set only text content
-        while (dom.firstChild) {
-          dom.removeChild(dom.firstChild);
-        }
-        
-        // Show fallback initially
-        dom.textContent = fallback || 'Loading...';
-        
-        // Fetch live data if siteUrl and pageId are available
-        if (siteUrl && pageId) {
-          fetchReviewRecords(siteUrl, pageId)
-            .then(data => {
-              if (data.count === 0) {
-                dom.textContent = fallback || '';
-                return;
-              }
-              
-              let displayValue = '';
-              if (dataType === 'lastUpdated') {
-                displayValue = formatDateDisplay(data.reviewedDate) || fallback;
-              } else if (dataType === 'nextReviewDate') {
-                displayValue = formatDateDisplay(data.nextReviewDate) || fallback;
-              } else if (dataType === 'version') {
-                displayValue = `v${data.count + 1}.0`;
-              }
-              
-              dom.textContent = displayValue;
-            })
-            .catch(() => {
-              dom.textContent = fallback || '';
-            });
-        }
-        
-        return true;
-      },
-      destroy: () => {
-        dom.removeEventListener('beforeinput', preventEdit);
-        dom.removeEventListener('input', preventEdit);
-        dom.removeEventListener('paste', preventEdit);
-        dom.removeEventListener('drop', preventEdit);
-        dom.removeEventListener('cut', preventEdit);
-      },
-    };
-  };
+// ── Shared NodeView component for all three dynamic nodes ──
+
+interface IDynamicNodeViewProps extends ReactNodeViewProps {
+  siteUrl: string;
+  pageId: number | undefined;
+  dataType: 'lastUpdated' | 'nextReviewDate' | 'version';
 }
+
+const DynamicNodeView: React.FC<IDynamicNodeViewProps> = ({ node, siteUrl, pageId, dataType }) => {
+  const [displayValue, setDisplayValue] = React.useState<string>('Loading...');
+  const fallback = (node.attrs.fallback as string) || '';
+
+  React.useEffect(() => {
+    if (!siteUrl || !pageId) {
+      setDisplayValue(fallback || '');
+      return;
+    }
+
+    fetchReviewRecords(siteUrl, pageId)
+      .then(data => {
+        if (data.count === 0) {
+          // No review records — use HTML fallback value
+          setDisplayValue(fallback || '');
+          return;
+        }
+        if (dataType === 'lastUpdated') {
+          setDisplayValue(formatDateDisplay(data.reviewedDate) || fallback);
+        } else if (dataType === 'nextReviewDate') {
+          setDisplayValue(formatDateDisplay(data.nextReviewDate) || fallback);
+        } else if (dataType === 'version') {
+          setDisplayValue(`v${data.count + 1}.0`);
+        }
+      })
+      .catch(() => {
+        setDisplayValue(fallback || '');
+      });
+  }, [siteUrl, pageId, dataType, fallback]);
+
+  return (
+    <NodeViewWrapper as="span" className={styles.dynamicNode}>
+      {displayValue}
+    </NodeViewWrapper>
+  );
+};
 
 // ── ReviewDateNode ──
 // Inline node that renders the Next Review Date from RunbookReviews list.
 // Stored in HTML as: <span data-type="review-date" data-fallback="[typed value]"></span>
-// Uses raw DOM with contenteditable="false" to prevent editing
 
 interface IDynamicNodeOptions {
   siteUrl: string;
@@ -553,7 +530,6 @@ const ReviewDateNode = TipTapNode.create<IDynamicNodeOptions>({
   atom: true,
   selectable: false,
   draggable: false,
-  content: '', // Empty content — no child nodes allowed
 
   addOptions() {
     return { siteUrl: '', pageId: undefined };
@@ -577,43 +553,17 @@ const ReviewDateNode = TipTapNode.create<IDynamicNodeOptions>({
     return ['span', { 'data-type': 'review-date', ...HTMLAttributes }];
   },
 
-  addProseMirrorPlugins() {
-    const nodeName = this.name;
-    return [
-      new Plugin({
-        key: new PluginKey(`blockEdit-${nodeName}`),
-        filterTransaction(tr) {
-          let blockTransaction = false;
-          
-          // Check if any steps in the transaction modify content inside this node type
-          tr.steps.forEach(step => {
-            const stepJSON = step.toJSON();
-            // Block insert, replace, and other content-modifying steps that target this node
-            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
-              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
-                if (node.type.name === nodeName) {
-                  blockTransaction = true;
-                }
-              });
-            }
-          });
-          
-          return !blockTransaction;
-        },
-      }),
-    ];
-  },
-
   addNodeView() {
     const { siteUrl, pageId } = this.options;
-    return createDynamicNodeView('nextReviewDate', siteUrl, pageId);
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => (
+      <DynamicNodeView {...props} siteUrl={siteUrl} pageId={pageId} dataType="nextReviewDate" />
+    ));
   },
 });
 
 // ── LastUpdatedNode ──
 // Inline node that renders the Last Updated date (ReviewedDate) from RunbookReviews list.
 // Stored in HTML as: <span data-type="last-updated" data-fallback="[typed value]"></span>
-// Uses raw DOM with contenteditable="false" to prevent editing
 
 const LastUpdatedNode = TipTapNode.create<IDynamicNodeOptions>({
   name: 'lastUpdated',
@@ -622,7 +572,6 @@ const LastUpdatedNode = TipTapNode.create<IDynamicNodeOptions>({
   atom: true,
   selectable: false,
   draggable: false,
-  content: '', // Empty content — no child nodes allowed
 
   addOptions() {
     return { siteUrl: '', pageId: undefined };
@@ -646,43 +595,17 @@ const LastUpdatedNode = TipTapNode.create<IDynamicNodeOptions>({
     return ['span', { 'data-type': 'last-updated', ...HTMLAttributes }];
   },
 
-  addProseMirrorPlugins() {
-    const nodeName = this.name;
-    return [
-      new Plugin({
-        key: new PluginKey(`blockEdit-${nodeName}`),
-        filterTransaction(tr) {
-          let blockTransaction = false;
-          
-          // Check if any steps in the transaction modify content inside this node type
-          tr.steps.forEach(step => {
-            const stepJSON = step.toJSON();
-            // Block insert, replace, and other content-modifying steps that target this node
-            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
-              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
-                if (node.type.name === nodeName) {
-                  blockTransaction = true;
-                }
-              });
-            }
-          });
-          
-          return !blockTransaction;
-        },
-      }),
-    ];
-  },
-
   addNodeView() {
     const { siteUrl, pageId } = this.options;
-    return createDynamicNodeView('lastUpdated', siteUrl, pageId);
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => (
+      <DynamicNodeView {...props} siteUrl={siteUrl} pageId={pageId} dataType="lastUpdated" />
+    ));
   },
 });
 
 // ── VersionNode ──
 // Inline node that renders the auto-incremented version from RunbookReviews list.
 // Stored in HTML as: <span data-type="version" data-fallback="[typed value]"></span>
-// Uses raw DOM with contenteditable="false" to prevent editing
 
 const VersionNode = TipTapNode.create<IDynamicNodeOptions>({
   name: 'version',
@@ -691,7 +614,6 @@ const VersionNode = TipTapNode.create<IDynamicNodeOptions>({
   atom: true,
   selectable: false,
   draggable: false,
-  content: '', // Empty content — no child nodes allowed
 
   addOptions() {
     return { siteUrl: '', pageId: undefined };
@@ -715,36 +637,11 @@ const VersionNode = TipTapNode.create<IDynamicNodeOptions>({
     return ['span', { 'data-type': 'version', ...HTMLAttributes }];
   },
 
-  addProseMirrorPlugins() {
-    const nodeName = this.name;
-    return [
-      new Plugin({
-        key: new PluginKey(`blockEdit-${nodeName}`),
-        filterTransaction(tr) {
-          let blockTransaction = false;
-          
-          // Check if any steps in the transaction modify content inside this node type
-          tr.steps.forEach(step => {
-            const stepJSON = step.toJSON();
-            // Block insert, replace, and other content-modifying steps that target this node
-            if (stepJSON.stepType === 'replace' || stepJSON.stepType === 'replaceAround') {
-              tr.doc.nodesBetween((stepJSON as any).from || 0, (stepJSON as any).to || tr.doc.content.size, (node, pos) => {
-                if (node.type.name === nodeName) {
-                  blockTransaction = true;
-                }
-              });
-            }
-          });
-          
-          return !blockTransaction;
-        },
-      }),
-    ];
-  },
-
   addNodeView() {
     const { siteUrl, pageId } = this.options;
-    return createDynamicNodeView('version', siteUrl, pageId);
+    return ReactNodeViewRenderer((props: ReactNodeViewProps) => (
+      <DynamicNodeView {...props} siteUrl={siteUrl} pageId={pageId} dataType="version" />
+    ));
   },
 });
 
@@ -1420,14 +1317,15 @@ function insertDocVersionBlock(editor: Editor, siteUrl: string, pageId: number |
   // Build the table HTML with dynamic node spans for auto fields
   // and empty cells for editable fields
   // Use a single-line compact string to prevent TipTap from inserting extra paragraph nodes
-  // Wrap dynamic node spans in <p> tags — TipTap tableCell requires block content (paragraph)
-  const tableHTML = '<table style="width:100%;border-collapse:collapse;"><tbody>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;width:40%;border:1px solid #edebe9;"><p>Runbook Author</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Created Date</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Last Updated</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="last-updated" data-fallback=""></span></p></td></tr>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Version</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="version" data-fallback="v1.0"></span></p></td></tr>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Next Review Date</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p><span data-type="review-date" data-fallback=""></span></p></td></tr>'
-    + '<tr><td style="padding:4px 8px;font-weight:600;border:1px solid #edebe9;"><p>Storage Location</p></td><td style="padding:4px 8px;border:1px solid #edebe9;"><p></p></td></tr>'
+  // No inline styles on td — let TipTap manage all styling via node attributes
+  // This ensures table toolbar (bg color, border, padding) works correctly on all cells
+  const tableHTML = '<table><tbody>'
+    + '<tr><td><p><strong>Runbook Author</strong></p></td><td><p></p></td></tr>'
+    + '<tr><td><p><strong>Created Date</strong></p></td><td><p></p></td></tr>'
+    + '<tr><td><p><strong>Last Updated</strong></p></td><td><p><span data-type="last-updated" data-fallback=""></span></p></td></tr>'
+    + '<tr><td><p><strong>Version</strong></p></td><td><p><span data-type="version" data-fallback="v1.0"></span></p></td></tr>'
+    + '<tr><td><p><strong>Next Review Date</strong></p></td><td><p><span data-type="review-date" data-fallback=""></span></p></td></tr>'
+    + '<tr><td><p><strong>Storage Location</strong></p></td><td><p></p></td></tr>'
     + '</tbody></table>';
 
   editor.chain().focus().insertContent(tableHTML).run();

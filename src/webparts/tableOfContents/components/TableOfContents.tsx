@@ -201,39 +201,31 @@ export default class TableOfContents extends React.Component<ITableOfContentsPro
     const containerTop = contentEl.getBoundingClientRect().top;
     let activeId: string | null = null;
 
-    // Look through headings and find which one is currently in view
-    // Find the topmost heading that has scrolled into view
-    let topHeadingIndex = -1;
-    let topHeadingDistance = Infinity;
+    // Strategy: find the LAST heading that has scrolled past the top of the viewport.
+    // No lower bound on distance — long sections can push headings hundreds of pixels
+    // above the viewport and they should still remain active.
+    let lastScrolledPastIndex = -1;
 
     for (let i = 0; i < headings.length; i++) {
       const heading = headings[i];
-      // Look up fresh element using data-toc-id to avoid stale references
       const element = contentEl.querySelector(`[data-toc-id="${heading.id}"]`) as HTMLElement | null;
-      
       if (element) {
         const rect = element.getBoundingClientRect();
         const distanceFromTop = rect.top - containerTop;
-        
-        // Find heading closest to top of viewport that has scrolled past it
-        if (distanceFromTop <= 80 && distanceFromTop > -1000) {
-          if (distanceFromTop > topHeadingDistance || topHeadingIndex === -1) {
-            topHeadingIndex = i;
-            topHeadingDistance = distanceFromTop;
-          }
+        // Heading has scrolled past the top threshold (80px offset)
+        if (distanceFromTop <= 80) {
+          lastScrolledPastIndex = i;
         }
       }
     }
 
-    // If we found a heading currently in view range
-    if (topHeadingIndex !== -1) {
-      const activeHeading = headings[topHeadingIndex];
-      // If the current heading is visible in TOC, use it
+    if (lastScrolledPastIndex !== -1) {
+      const activeHeading = headings[lastScrolledPastIndex];
       if (isVisible(activeHeading.level)) {
         activeId = activeHeading.id;
       } else {
-        // Otherwise walk backwards to find the nearest visible parent
-        for (let i = topHeadingIndex; i >= 0; i--) {
+        // Walk backwards to find nearest visible heading above
+        for (let i = lastScrolledPastIndex - 1; i >= 0; i--) {
           if (isVisible(headings[i].level)) {
             activeId = headings[i].id;
             break;
